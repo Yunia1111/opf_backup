@@ -1,0 +1,30 @@
+bus_id;bus_name;grid_type;country;vm_pu;va_degree;max_p_mw;min_p_mw
+202747445_380;Umspannwerk Gießen Nord;main_slack;Germany;1.0;0;999999;-999999
+170123812_380;Umspannwerk Vierraden;border;Poland;1.0;;600;-600
+59026005_380;Umspannwerk Hagenwerder;border;Poland;1.0;;600;-600
+br_157331464_380;br_157331464;border;Czech Republic;1.0;;600;-600
+br_32693105_48907286_2_380;br_32693105_48907286_2;border;Czech Republic;1.0;;600;-600
+24976300_380;Künzing;border;Austria;1.0;;600;-600
+57727004_380;Umspannanlage Leupolz;border;Austria;1.0;;600;-600
+31131320_380;Obermooweiler;border;Austria;1.0;;600;-600
+88916034_380;Netzknoten Kühmoos;border;Switzerland;1.0;;600;-600
+31367940_380;Umspannwerk Tiengen;border;Switzerland;1.0;;600;-600
+br_88778343_380;br_88778343;border;Switzerland;1.0;;600;-600
+br_127432154_86833130_2_380_remove;br_127432154_86833130_2France;1.0;;600;-600
+242756113_380;380-kV-Umspannwerk Eichstetten;border;France;1.0;;600;-600
+br_106710790_203022503_2_380;br_106710790_203022503_2;border;France;1.0;;400;-400
+br_128478125_91655781_2_380;br_128478125_91655781_2;border;Luxembourg;1.0;;400;-400
+151967290_380;Station Niederstedem;border;Luxembourg;1.0;;400;-400
+24268944_380;Station Verlautenheide;border;Belgium;1.0;;400;-400
+br_245548337_29291584_2_380;br_245548337_29291584_2;border;Netherlands;1.0;;600;-600
+br_746755855_766770559_2_380;br_746755855_766770559_2;border;Netherlands;1.0;;600;-600
+br_114397559_380;br_114397559;border;Netherlands;1.0;;600;-600
+br_31742608_716680757_2_380;br_31742608_716680757_2;border;Netherlands;1.0;;600;-600
+142487746_380;Dörpen West;border;HVDC-Offshore;1.0;;600;-600
+177829920_380;Diele;border;HVDC-Offshore;1.0;;600;-600
+br_1151967274_380;br_1151967274;border;Denmark;1.0;;600;-600
+301158539_380;Jardelund;border;HVDC-Denmark;1.0;;600;-600
+br_907517160_907517163_2_380;br_907517160_907517163_2;border;HVDC-Denmark;1.0;;600;-600
+275466323_380;HVDC Herrenwyk (Baltic Cable);border;HVDC-Offshore;1.0;;600;-600
+32063539_380;Bentwisch HGÜ;border;Denmark;1.0;;600;-600
+460134233_380;Umspannwerk Lubmin;border;HVDC-Offshore;1.0;;600;-600
