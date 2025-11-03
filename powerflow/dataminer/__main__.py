@@ -1,4 +1,4 @@
-import sys
+import sys, os
 
 from .model import *
 from .map import create_map
@@ -34,6 +34,9 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--fetch-new-data":
 dataloc = DB.data_location
 datadir = DB.data_cache_location
 csv_dir = 'data/intermediate_model/'
+
+if not os.path.exists(csv_dir):
+	os.makedirs(csv_dir)
 
 
 

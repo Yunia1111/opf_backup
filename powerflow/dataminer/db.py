@@ -17,6 +17,9 @@ class DB:
 	data_location = "data/source_data/"
 	data_cache_location = "data/db_cache/"
 
+	if not os.path.exists(data_cache_location):
+		os.makedirs(data_cache_location)
+
 	def __init__(self):
 
 		with open(Path.home() / 'creds' / 'ma_pfg_mdb_prod', 'r') as credfile:
