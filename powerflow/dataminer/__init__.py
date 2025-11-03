@@ -19,7 +19,7 @@ def prep():
 	from .__main__ import main
 	main(only_prep_gens=True)
 
-def model():
+def create_model():
 
 	from .__main__ import main
 	main()

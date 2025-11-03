@@ -31,7 +31,7 @@ for command in command_tests:
 command_tasks = {
 	'fetch-db': ['dataminer', 'fetch_db'],
 	'data-prep': ['dataminer', 'prep'],
-	'create-model': ['dataminer', 'model'],
+	'create-model': ['dataminer', 'create_model'],
 	'analysis': ['analysis', 'all'],
 }
 
