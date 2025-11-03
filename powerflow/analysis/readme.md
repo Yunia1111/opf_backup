@@ -43,7 +43,7 @@ analysis/
 
 ## Input Data
 
-The module expects CSV files in `analysis/data/intermediate_model/`:
+The module expects CSV files in `data/intermediate_model/`:
 
 - `buses.csv` - Network buses (substations)
 - `connections.csv` - Transmission lines

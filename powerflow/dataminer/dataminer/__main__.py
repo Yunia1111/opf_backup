@@ -43,6 +43,7 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--fetch-new-data":
 
 dataloc = DB.data_location
 datadir = DB.data_cache_location
+csv_dir = 'data/intermediate_model/'
 
 
 
@@ -281,12 +282,12 @@ with open("deleted_conns.txt", "w+") as f:
 print("Node entries after island removal:", len(Node._all))
 print("Conn entries after island removal:", len(Connection._all))
 
-Node.write_csv("buses.csv")
+Node.write_csv(csv_dir + "buses.csv")
 Connection.write_csv(
-	"connections.csv",
-	"connections_wiredata.csv", Node.get
+	csv_dir + "connections.csv",
+	csv_dir + "connections_wiredata.csv", Node.get
 )
-Transformer.write_csv("transformers.csv")
+Transformer.write_csv(csv_dir + "transformers.csv")
 
 unfound_buses = Connection.test_refs(Node._all.keys())
 print("NIDs in conns but not in nodes:")
@@ -323,7 +324,7 @@ Generator.load_from_json(
 
 print("Generator Entries:", len(Generator._all))
 
-Generator.write_csv("generators.csv")
+Generator.write_csv(csv_dir + "generators.csv")
 
 create_map(
 	Node._all.values(),
@@ -374,7 +375,7 @@ for sub_i, reg_i in zip(sub_indices, region_indices):
 
 print("Going through regions and writing loads...")
 
-Load.write_csv('loads.csv')
+Load.write_csv(csv_dir + 'loads.csv')
 
 print("Total load (for sanity check):", round(Load.total_load()/1000, 3), "GW (should be ~52GW)")
 print("Assigned load (for sanity check):", round(Load.agg/1000, 3), "GW (should be ~50GW)")

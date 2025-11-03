@@ -6,8 +6,8 @@ from bson.json_util import dumps
 
 class DB:
 
-	data_location = os.path.dirname(__file__) + "/../Data/"
-	data_cache_location = data_location + "db_cache/"
+	data_location = "data/source_data/"
+	data_cache_location = "data/db_cache/"
 
 	def __init__(self):
 
