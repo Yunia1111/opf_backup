@@ -26,8 +26,8 @@ This repository contains:
 ## Setup
 
 ```sh
-python -m venv .                # Create Virtual Env
-. bin/activate                  # Activate VEnv
+python -m venv .venv            # Create Virtual Env
+. .venv/bin/activate            # Activate VEnv
 pip install -r requirements.txt # Install requirements
 ```
 
