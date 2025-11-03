@@ -6,21 +6,21 @@ import folium
 from folium import plugins
 import json
 import os
-import config
 import math
+from . import config
 
 class Visualizer:
     def __init__(self, net=None):
         self.net = net
         self.map = None
-        
+
         # Professional engineering color scheme
         self.voltage_colors = {
             380: '#9b59b6',  # Purple for EHV
             220: '#3498db',  # Blue for HV
             110: '#1abc9c'   # Teal for MV
         }
-        
+
         self.voltage_status_colors = {
             'critical_low': '#8B0000',    # Dark red
             'low': '#DC143C',             # Crimson
@@ -28,32 +28,32 @@ class Visualizer:
             'high': '#FF8C00',            # Dark orange
             'critical_high': '#4B0082'    # Indigo
         }
-        
+
         self.loading_colors = {
             'normal': '#2E8B57',      # Sea green
             'elevated': '#DAA520',    # Goldenrod
             'high': '#FF6347',        # Tomato
             'critical': '#8B008B'     # Dark magenta
         }
-        
+
     def create_map(self):
         """Create professional engineering visualization"""
         print("Generating professional power system visualization...")
-        
+
         data_path = os.path.join(config.OUTPUT_DIR, 'visualization_data.json')
         with open(data_path, 'r') as f:
             data = json.load(f)
-        
+
         if len(data['buses']) == 0:
             print("  ⚠ No visualization data available")
             return
-        
+
         # Calculate map center
         all_lats = [b['lat'] for b in data['buses']]
         all_lons = [b['lon'] for b in data['buses']]
         center_lat = sum(all_lats) / len(all_lats)
         center_lon = sum(all_lons) / len(all_lons)
-        
+
         # Initialize map
         self.map = folium.Map(
             location=[center_lat, center_lon],
@@ -61,7 +61,7 @@ class Visualizer:
             tiles='OpenStreetMap',
             prefer_canvas=True
         )
-        
+
         # Add professional dark theme
         folium.TileLayer(
             tiles='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
@@ -70,10 +70,10 @@ class Visualizer:
             control=True,
             opacity=0.8
         ).add_to(self.map)
-        
+
         # Create layer structure
         voltage_levels = sorted(set(b['vn_kv'] for b in data['buses']))
-        
+
         # Voltage-specific layers
         voltage_layers = {}
         for vn in voltage_levels:
@@ -81,75 +81,75 @@ class Visualizer:
                 'lines': folium.FeatureGroup(name=f'{vn}kV Lines', show=(vn>=220)),
                 'buses': folium.FeatureGroup(name=f'{vn}kV Substations', show=(vn>=220))
             }
-        
+
         # Analysis layers
         power_flow_layer = folium.FeatureGroup(name='Power Flow (MW)', show=False)
         loading_layer = folium.FeatureGroup(name='Line Loading (%)', show=False)
         voltage_layer = folium.FeatureGroup(name='Voltage Profile', show=False)
         generation_layer = folium.FeatureGroup(name='Generation', show=True)
         load_layer = folium.FeatureGroup(name='Loads', show=False)
-        
+
         # Build visualization
         line_voltage_map = self._build_line_voltage_map(data['lines'], data['buses'])
-        
-        self._add_lines(data['lines'], line_voltage_map, voltage_layers, 
+
+        self._add_lines(data['lines'], line_voltage_map, voltage_layers,
                        power_flow_layer, loading_layer)
         self._add_buses(data['buses'], voltage_layers, voltage_layer)
         self._add_loads(data.get('loads', []), load_layer)
         self._add_generators(data['generators'], generation_layer)
         self._add_external_grids(data['external_grids'])
-        
+
         # Add all layers to map
         for vn in voltage_levels:
             voltage_layers[vn]['lines'].add_to(self.map)
             voltage_layers[vn]['buses'].add_to(self.map)
-        
+
         power_flow_layer.add_to(self.map)
         loading_layer.add_to(self.map)
         voltage_layer.add_to(self.map)
         generation_layer.add_to(self.map)
         load_layer.add_to(self.map)
-        
+
         # Add controls
         folium.LayerControl(collapsed=False, position='topright').add_to(self.map)
         plugins.Fullscreen(position='topleft').add_to(self.map)
-        plugins.MeasureControl(position='bottomleft', 
+        plugins.MeasureControl(position='bottomleft',
                               primary_length_unit='kilometers').add_to(self.map)
-        
+
         # Add professional legend with generator types
         self._add_engineering_legend(voltage_levels)
-        
+
         # Add scenario information panel
         self._add_scenario_panel()
-        
+
         # Save
         output_path = os.path.join(config.OUTPUT_DIR, 'network_map.html')
         self.map.save(output_path)
         print(f"  ✓ Visualization saved: {output_path}")
-    
+
     def _build_line_voltage_map(self, lines, buses):
         """Map line IDs to their voltage levels"""
         bus_voltage = {b['id']: b['vn_kv'] for b in buses}
         line_voltage = {}
-        
+
         for line in lines:
             from_v = bus_voltage.get(line.get('from_bus_id'), 380)
             to_v = bus_voltage.get(line.get('to_bus_id'), 380)
             line_voltage[line['id']] = max(from_v, to_v)
-        
+
         return line_voltage
-    
-    def _add_lines(self, lines, line_voltage_map, voltage_layers, 
+
+    def _add_lines(self, lines, line_voltage_map, voltage_layers,
                    power_flow_layer, loading_layer):
         """Add transmission lines with multi-layer support and real geographic paths"""
-        
+
         for line in lines:
             line_vn = line_voltage_map.get(line['id'], 380)
             base_color = self.voltage_colors.get(line_vn, '#3498db')
-            
+
             loading = line['loading_percent']
             power = abs(line['p_from_mw'])
-            
+
             # Determine loading color
             if loading > 100:
                 load_color = self.loading_colors['critical']
@@ -159,7 +159,7 @@ class Visualizer:
                 load_color = self.loading_colors['elevated']
             else:
                 load_color = self.loading_colors['normal']
-            
+
             # Use real geographic coordinates if available
             if 'geo_coords' in line and line['geo_coords']:
                 coords = line['geo_coords']
@@ -167,11 +167,11 @@ class Visualizer:
                 # Fallback to straight line
                 coords = [[line['from_lat'], line['from_lon']],
                          [line['to_lat'], line['to_lon']]]
-            
+
             # Professional popup
             popup_html = self._create_line_popup(line, line_vn, base_color)
             tooltip = f"{line_vn}kV | {power:.0f} MW | {loading:.0f}%"
-            
+
             # Base layer - simple line by voltage
             folium.PolyLine(
                 locations=coords,
@@ -181,7 +181,7 @@ class Visualizer:
                 weight=2.5 if line_vn >= 380 else 2,
                 opacity=0.75
             ).add_to(voltage_layers[line_vn]['lines'])
-            
+
             # Power flow layer - width by power (SQRT scale - more visible)
             power_weight = 2.0 + math.sqrt(max(power, 1)) * 0.1
             folium.PolyLine(
@@ -192,7 +192,7 @@ class Visualizer:
                 weight=power_weight,
                 opacity=0.8
             ).add_to(power_flow_layer)
-            
+
             # Loading layer - color by loading
             loading_weight = 2 + (loading / 40)
             folium.PolyLine(
@@ -203,23 +203,23 @@ class Visualizer:
                 weight=loading_weight,
                 opacity=0.85
             ).add_to(loading_layer)
-    
+
     def _add_buses(self, buses, voltage_layers, voltage_layer):
         """Add substations with proper sizing"""
-        
+
         for bus in buses:
             vn = bus['vn_kv']
             vm_pu = bus['vm_pu']
-            
+
             base_color = self.voltage_colors.get(vn, '#3498db')
             status_color = self._get_voltage_status_color(vm_pu)
-            
+
             # Size by voltage level (smaller than before)
             radius = 4 if vn >= 380 else 3
-            
+
             popup_html = self._create_bus_popup(bus, base_color)
             tooltip = f"{bus['name'][:40]} | {vm_pu:.3f} pu"
-            
+
             # Voltage level layer
             folium.CircleMarker(
                 location=[bus['lat'], bus['lon']],
@@ -231,7 +231,7 @@ class Visualizer:
                 fillColor=base_color,
                 fillOpacity=0.85
             ).add_to(voltage_layers[vn]['buses'])
-            
+
             # Voltage profile layer
             folium.CircleMarker(
                 location=[bus['lat'], bus['lon']],
@@ -243,18 +243,18 @@ class Visualizer:
                 fillColor=status_color,
                 fillOpacity=0.9
             ).add_to(voltage_layer)
-    
+
     def _add_loads(self, loads, load_layer):
         """Add load markers with size by magnitude (INCREASED SIZE)"""
-        
+
         if len(loads) == 0:
             return
-        
+
         for load in loads:
             p_mw = load['p_mw']
             # Increased base size from 3 to 6, and increased scaling
             radius = max(6, 4 + math.log10(max(p_mw, 1)) * 2.5)
-            
+
             popup_html = f"""
             <div style="font-family:Consolas,monospace; width:360px; padding:8px;">
                 <table style="width:100%; border-collapse:collapse; font-size:13px;">
@@ -270,7 +270,7 @@ class Visualizer:
                 </table>
             </div>
             """
-            
+
             folium.CircleMarker(
                 location=[load['lat'], load['lon']],
                 radius=radius,
@@ -281,24 +281,24 @@ class Visualizer:
                 fillColor='#e74c3c',
                 fillOpacity=0.7
             ).add_to(load_layer)
-    
+
     def _add_generators(self, generators, generation_layer):
         """Add generators with TYPE-BASED COLORS and INCREASED SIZE"""
-        
+
         if len(generators) == 0:
             return
-        
+
         for gen in generators:
             sn_mva = gen['sn_mva']
             p_mw = gen['p_mw']
             gen_type = str(gen.get('type', 'other')).lower().strip()
-            
+
             # Increased base size from 3 to 6, and increased scaling
             radius = max(6, 4 + math.log10(max(sn_mva, 1)) * 2.5)
-            
+
             # Get color based on generator type
             color = self._get_generator_color(gen_type)
-            
+
             popup_html = f"""
             <div style="font-family:Consolas,monospace; width:360px; padding:8px;">
                 <table style="width:100%; border-collapse:collapse; font-size:13px;">
@@ -318,7 +318,7 @@ class Visualizer:
                 </table>
             </div>
             """
-            
+
             folium.CircleMarker(
                 location=[gen['lat'], gen['lon']],
                 radius=radius,
@@ -329,32 +329,32 @@ class Visualizer:
                 fillColor=color,
                 fillOpacity=0.8
             ).add_to(generation_layer)
-    
+
     def _get_generator_color(self, gen_type):
         """Get color for generator based on type"""
         gen_type_lower = gen_type.lower().strip()
-        
+
         # Try exact match first
         if gen_type_lower in config.GENERATOR_TYPE_COLORS:
             return config.GENERATOR_TYPE_COLORS[gen_type_lower]
-        
+
         # Try partial match
         for key, color in config.GENERATOR_TYPE_COLORS.items():
             if key in gen_type_lower or gen_type_lower in key:
                 return color
-        
+
         # Default fallback
         return config.GENERATOR_TYPE_COLORS.get('other', '#95a5a6')
-    
+
     def _add_external_grids(self, ext_grids):
         """Add external grid markers with HVDC identification"""
-        
+
         ext_layer = folium.FeatureGroup(name='External Grids', show=True)
-        
+
         for ext in ext_grids:
             # Check if this is an HVDC connection
             is_hvdc = 'HVDC' in ext['name'].upper() or 'HVDC' in str(ext.get('type', '')).upper()
-            
+
             # Choose color and icon based on type
             if is_hvdc:
                 icon_color = 'orange'
@@ -364,7 +364,7 @@ class Visualizer:
                 icon_color = 'red'
                 icon_name = 'plug'
                 marker_color = '#c0392b'
-            
+
             popup_html = f"""
             <div style="font-family:Consolas,monospace; width:360px; padding:8px;">
                 <table style="width:100%; border-collapse:collapse; font-size:13px;">
@@ -382,22 +382,22 @@ class Visualizer:
                 </table>
             </div>
             """
-            
+
             folium.Marker(
                 location=[ext['lat'], ext['lon']],
                 popup=folium.Popup(popup_html, max_width=380),
                 tooltip=f"{'HVDC' if is_hvdc else 'Grid'}: {ext['p_mw']:.0f} MW",
                 icon=folium.Icon(color=icon_color, icon=icon_name, prefix='fa')
             ).add_to(ext_layer)
-        
+
         ext_layer.add_to(self.map)
-    
+
     def _create_bus_popup(self, bus, color):
         """Create professional bus popup"""
         vm_pu = bus['vm_pu']
         status = self._get_voltage_status_text(vm_pu)
         status_color = self._get_voltage_status_color(vm_pu)
-        
+
         return f"""
         <div style="font-family:Consolas,monospace; width:400px; padding:8px;">
             <table style="width:100%; border-collapse:collapse; font-size:13px;">
@@ -435,12 +435,12 @@ class Visualizer:
             </table>
         </div>
         """
-    
+
     def _create_line_popup(self, line, vn, color):
         """Create professional line popup"""
         loading = line['loading_percent']
         status_color = self._get_loading_color(loading)
-        
+
         return f"""
         <div style="font-family:Consolas,monospace; width:400px; padding:8px;">
             <table style="width:100%; border-collapse:collapse; font-size:13px;">
@@ -490,39 +490,39 @@ class Visualizer:
             </table>
         </div>
         """
-    
+
     def _add_engineering_legend(self, voltage_levels):
         """Add professional engineering legend with generator types"""
         legend_html = """
-        <div style="position:fixed; bottom:60px; left:20px; width:260px; 
-                    background:rgba(255,255,255,0.95); border:2px solid #2c3e50; 
+        <div style="position:fixed; bottom:60px; left:20px; width:260px;
+                    background:rgba(255,255,255,0.95); border:2px solid #2c3e50;
                     z-index:9999; font-size:11px; padding:10px; border-radius:4px;
                     font-family:Consolas,monospace; box-shadow:0 2px 8px rgba(0,0,0,0.3);
                     max-height:500px; overflow-y:auto;">
-        <div style="font-weight:bold; font-size:12px; margin-bottom:8px; 
+        <div style="font-weight:bold; font-size:12px; margin-bottom:8px;
                     border-bottom:2px solid #2c3e50; padding-bottom:4px;">
             VOLTAGE LEVELS
         </div>
         """
-        
+
         for vn in voltage_levels:
             color = self.voltage_colors.get(vn, '#3498db')
             legend_html += f'''
             <div style="margin:3px 0; display:flex; align-items:center;">
-                <div style="background:{color}; width:14px; height:14px; 
+                <div style="background:{color}; width:14px; height:14px;
                      border-radius:2px; margin-right:6px; border:1px solid #2c3e50;"></div>
                 <span>{vn} kV</span>
             </div>
             '''
-        
+
         # Add generator type legend
         legend_html += """
-        <div style="font-weight:bold; font-size:12px; margin:10px 0 6px 0; 
+        <div style="font-weight:bold; font-size:12px; margin:10px 0 6px 0;
                     border-bottom:2px solid #2c3e50; padding-bottom:4px;">
             GENERATOR TYPES
         </div>
         """
-        
+
         # Show main generator types with their colors
         gen_types_to_show = [
             ('wind_offshore', 'Wind Offshore'),
@@ -534,40 +534,40 @@ class Visualizer:
             ('storage', 'Storage'),
             ('other', 'Other')
         ]
-        
+
         for type_key, type_label in gen_types_to_show:
             color = config.GENERATOR_TYPE_COLORS.get(type_key, '#95a5a6')
             legend_html += f'''
             <div style="margin:3px 0; display:flex; align-items:center;">
-                <div style="background:{color}; width:12px; height:12px; 
+                <div style="background:{color}; width:12px; height:12px;
                      border-radius:50%; margin-right:6px; border:1px solid #2c3e50;"></div>
                 <span style="font-size:10px;">{type_label}</span>
             </div>
             '''
-        
+
         # Add HVDC legend
         legend_html += f"""
-        <div style="font-weight:bold; font-size:12px; margin:10px 0 6px 0; 
+        <div style="font-weight:bold; font-size:12px; margin:10px 0 6px 0;
                     border-bottom:2px solid #2c3e50; padding-bottom:4px;">
             SPECIAL CONNECTIONS
         </div>
         <div style="margin:3px 0; display:flex; align-items:center;">
-            <div style="background:{config.HVDC_COLOR}; width:14px; height:14px; 
+            <div style="background:{config.HVDC_COLOR}; width:14px; height:14px;
                  border-radius:2px; margin-right:6px; border:1px solid #2c3e50;"></div>
             <span>HVDC Converter</span>
         </div>
         """
-        
+
         legend_html += """
-        <div style="font-weight:bold; font-size:12px; margin:10px 0 6px 0; 
+        <div style="font-weight:bold; font-size:12px; margin:10px 0 6px 0;
                     border-bottom:2px solid #2c3e50; padding-bottom:4px;">
             VOLTAGE STATUS
         </div>
         <div style="margin:3px 0;"><span style="color:#228B22;">●</span> Normal (0.95-1.05)</div>
         <div style="margin:3px 0;"><span style="color:#FF8C00;">●</span> Warning</div>
         <div style="margin:3px 0;"><span style="color:#DC143C;">●</span> Critical</div>
-        
-        <div style="font-weight:bold; font-size:12px; margin:10px 0 6px 0; 
+
+        <div style="font-weight:bold; font-size:12px; margin:10px 0 6px 0;
                     border-bottom:2px solid #2c3e50; padding-bottom:4px;">
             LINE LOADING
         </div>
@@ -577,9 +577,9 @@ class Visualizer:
         <div style="margin:3px 0;"><span style="color:#8B008B;">●</span> Overload (&gt;100%)</div>
         </div>
         """
-        
+
         self.map.get_root().html.add_child(folium.Element(legend_html))
-    
+
     def _add_scenario_panel(self):
         """Add expandable scenario information panel"""
         # Get capacity factors and scaling factors from config
@@ -587,7 +587,7 @@ class Visualizer:
         for gen_type, cf in config.GENERATION_CAPACITY_FACTORS.items():
             if not gen_type in ['wind', 'solar', 'hydro', 'gas', 'other']:  # Skip fallback patterns
                 cf_html += f'<div style="margin:2px 0; font-size:10px;">{gen_type}: {cf}</div>'
-        
+
         scenario_html = f"""
         <div style="position:fixed; bottom:40px; right:20px; z-index:9999;">
             <button id="scenario-toggle" style="
@@ -597,11 +597,11 @@ class Visualizer:
                 📊 Scenario Info
             </button>
             <div id="scenario-panel" style="
-                display:none; margin-top:5px; width:300px; 
-                background:rgba(255,255,255,0.95); border:2px solid #3498db; 
+                display:none; margin-top:5px; width:300px;
+                background:rgba(255,255,255,0.95); border:2px solid #3498db;
                 border-radius:4px; padding:10px; font-family:Consolas,monospace;
                 box-shadow:0 2px 8px rgba(0,0,0,0.3); max-height:400px; overflow-y:auto;">
-                <div style="font-weight:bold; font-size:13px; margin-bottom:8px; 
+                <div style="font-weight:bold; font-size:13px; margin-bottom:8px;
                             border-bottom:2px solid #3498db; padding-bottom:4px; color:#2c3e50;">
                     SCENARIO PARAMETERS
                 </div>
@@ -637,9 +637,9 @@ class Visualizer:
         }};
         </script>
         """
-        
+
         self.map.get_root().html.add_child(folium.Element(scenario_html))
-    
+
     def _get_voltage_status_color(self, vm_pu):
         """Get voltage status color"""
         if vm_pu < 0.90:
@@ -652,7 +652,7 @@ class Visualizer:
             return self.voltage_status_colors['high']
         else:
             return self.voltage_status_colors['critical_high']
-    
+
     def _get_voltage_status_text(self, vm_pu):
         """Get voltage status text"""
         if vm_pu < 0.90:
@@ -665,7 +665,7 @@ class Visualizer:
             return 'HIGH'
         else:
             return 'CRITICAL HIGH'
-    
+
     def _get_loading_color(self, loading):
         """Get loading status color"""
         if loading > 100:

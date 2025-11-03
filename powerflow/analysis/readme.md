@@ -57,8 +57,8 @@ The module expects CSV files in `data/intermediate_model/`:
 ### Basic Usage
 
 ```bash
-cd powerflow/analysis
-python main.py
+cd powerflow
+python -m analysis
 ```
 
 ### Configuration

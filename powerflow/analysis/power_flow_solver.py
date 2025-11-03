@@ -4,7 +4,7 @@ IMPROVED VERSION: Added silent mode for incremental building
 """
 import pandapower as pp
 import warnings
-import config
+from . import config
 
 warnings.filterwarnings('ignore', message='.*numba.*')
 
@@ -14,11 +14,11 @@ class PowerFlowSolver:
         self.converged = False
         self.algorithm_used = None
         self.silent = silent  # Silent mode for incremental building
-        
+
     def solve(self):
         """Run power flow with fallback algorithms"""
         algorithms = config.ALGORITHM_SEQUENCE
-        
+
         # Try standard settings
         for alg in algorithms:
             try:
@@ -31,7 +31,7 @@ class PowerFlowSolver:
                     return True
             except:
                 continue
-                
+
         # Try relaxed settings
         for alg in ['nr', 'gs']:
             try:
@@ -44,7 +44,7 @@ class PowerFlowSolver:
                     return True
             except:
                 continue
-                
+
         # Try DC initialization
         try:
             pp.rundcpp(self.net, numba=False)
@@ -57,7 +57,7 @@ class PowerFlowSolver:
                 return True
         except:
             pass
-            
+
         # Failed - only show error if not silent
         if not self.silent:
             print("\n✗ CONVERGENCE FAILED")
@@ -65,7 +65,7 @@ class PowerFlowSolver:
             analyzer = NetworkAnalyzer(self.net)
             analyzer.diagnose_non_convergence()
         return False
-        
+
     def _print_summary(self):
         """Print convergence summary (only in verbose mode)"""
         # REMOVED - No output in any mode
