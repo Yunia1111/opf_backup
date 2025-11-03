@@ -5,15 +5,15 @@ This repository contains:
 
 ## The powerflow script
 
-- [ ] CLI and option system for running power flow analyses
-- [ ] Execute dataminer and flow analysis modules
+- CLI and option system for running power flow analyses
+- Execute dataminer and flow analysis modules
 
 ## Data Miner
 
-- [x] Fetch data from Blindleister DB
-- [x] Process and clean up data
-- [x] Assemble features into grid model
-- [x] Export Model into intermediate CSVs for analysis
+- Fetch data from Blindleister DB
+- Process and clean up data
+- Assemble features into grid model
+- Export Model into intermediate CSVs for analysis
 
 ## Analysis
 
@@ -58,4 +58,4 @@ So normally, you can just run the target step you're working on:
 python -m powerflow analysis
 ```
 
-and everything should work.
+and everything should work using the existing data from previous steps.
