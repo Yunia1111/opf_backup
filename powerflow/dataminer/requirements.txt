@@ -1,0 +1,7 @@
+pymongo
+pyproj
+numpy
+scipy
+folium
+geopandas
+shapely
