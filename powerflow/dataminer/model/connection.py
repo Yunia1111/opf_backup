@@ -642,6 +642,15 @@ class TransmissionLine(Connection):
 				#input("Press Enter to continue...")
 				continue
 
+			except CircuitCountError as e:
+				# 1445957438 -> Cables: '1;4', Circuits: '1'
+				print(raw_line)
+				print(e)
+				if (raw_line['properties']['Id'] == 1445957438):
+					continue
+				else:
+					exit()
+
 			except Exception as e:
 				print(e)
 				print("Offending entry:", raw_line)

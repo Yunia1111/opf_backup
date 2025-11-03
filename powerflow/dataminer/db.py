@@ -4,6 +4,14 @@ from pathlib import Path
 from pymongo import MongoClient, ASCENDING
 from bson.json_util import dumps
 
+"""
+- 5010 substations
+- 2729 transmission cables
+- 19607 transmission lines
+- 6390795 generators
+- 8175 load analysis counties
+"""
+
 class DB:
 
 	data_location = "data/source_data/"

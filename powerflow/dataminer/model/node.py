@@ -275,6 +275,10 @@ class Substation(Node):
 
 		for raw_substation in raw_substations:
 
+			if raw_substation['Id'].startswith('way/Vir'):
+				print("Virtual entry, skip")
+				continue
+
 			try:
 				substation = Substation(
 					raw_substation,
