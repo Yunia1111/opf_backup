@@ -3,6 +3,7 @@
 *.zip
 deleted_*.txt
 maps/
+results/
 
 # Intermediate cache files (large!)
 data/db_cache/
