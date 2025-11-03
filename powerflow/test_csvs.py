@@ -4,7 +4,7 @@ print("Running checks on CSVs...")
 
 bus_list = []
 
-with open('buses.csv') as busfile:
+with open('data/buses.csv') as busfile:
 
 	buses = csv.DictReader(busfile, delimiter=';')
 	for row in buses:
@@ -15,7 +15,7 @@ with open('buses.csv') as busfile:
 unfound_buses = set()
 loop_conns = set()
 
-with open('connections.csv') as connfile:
+with open('data/connections.csv') as connfile:
 
 	conns = csv.DictReader(connfile, delimiter=';')
 
