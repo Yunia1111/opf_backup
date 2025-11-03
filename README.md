@@ -20,3 +20,13 @@ This repository contains:
 - Load Model from CSVs into PandaPower
 - Run power flow
 - Provide results graphically
+
+# Install and run
+
+## Setup
+
+```sh
+python -m venv .				# Create Virtual Env
+. bin/activate					# Activate VEnv
+pip install -r requirements.txt	# Install requirements
+```
