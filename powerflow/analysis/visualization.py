@@ -1,19 +1,16 @@
 """
-Visualizer - Professional Power System Visualization
-Features: Minimizable Dashboard, Split Layers, Pie Charts, HVDC Lines.
+Visualizer - Generates interactive folium maps of the power grid.
+Minimizable Dashboard, Split Layers, Pie Charts, HVDC Lines.
 """
 import folium
 from folium import plugins
 from folium.features import DivIcon
 import json
 import os
-import config
+from . import config
 import math
 from collections import defaultdict
-try:
-    from scenarios import SCENARIOS # Updated Import
-except ImportError:
-    SCENARIOS = {}
+from .scenarios import SCENARIOS 
 
 class Visualizer:
     def __init__(self):

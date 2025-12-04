@@ -1,8 +1,5 @@
 """
-OPF Engine - Manages scenario application, OPF cost/constraint setup, 
-and power flow solving.
-Integrates ScenarioManager, OPFCostManager, and PowerFlowSolver logic.
-Includes Output Redirection and Robust Convergence Checks.
+OPF - Manages scenario application, OPF cost/constraint setup, and power flow solving.
 """
 import copy
 import pandas as pd
@@ -11,11 +8,8 @@ import numpy as np
 import warnings
 import os
 import sys
-import config
-try:
-    from scenarios import SCENARIOS # Updated Import
-except ImportError:
-    SCENARIOS = {} # Fallback
+from . import config
+from .scenarios import SCENARIOS
 
 warnings.filterwarnings('ignore', message='.*numba.*')
 

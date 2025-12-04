@@ -1,15 +1,15 @@
 """
-Injection Analyzer - Calculates the maximum power hosting capacity.
-Features: Warm Start, Cost Reset, Map Generation.
+Injections- Calculates the maximum injection capacity.
+Warm Start, Cost Reset, Map Generation.
 """
 import copy
 import numpy as np
 import pandas as pd
 import pandapower as pp
 import config
-from opf import OPFEngine # Updated Import
-import report_export as ReportGenerator # Updated Import & Aliased
-import visualization as Visualizer # Updated Import & Aliased
+from .opf import OPFEngine
+from . import report_export as ReportGenerator 
+from . import visualization as Visualizer 
 
 class InjectionAnalyzer:
     def __init__(self, base_net, external_grids):

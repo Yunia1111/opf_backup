@@ -1,4 +1,3 @@
-# fileName: scenarios.py
 """
 Scenario Definitions - Contains fixed capacity factors (CFs) and load scaling.
 """

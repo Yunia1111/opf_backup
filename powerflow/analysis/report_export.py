@@ -1,16 +1,12 @@
 """
 Report Generator - Exports OPF results to CSV, JSON and TXT.
-Features: Detailed Energy Mix, Import/Export, and NEW HVDC Summary.
-FIX: Added safety checks for 'tap_phase_shifter' column to prevent KeyErrors.
 """
 import pandas as pd
 import os
 import json
-import config
-try:
-    from scenarios import SCENARIOS # Updated Import
-except ImportError:
-    SCENARIOS = {}
+from . import config
+from .scenarios import SCENARIOS
+
 
 class ReportGenerator:
     def __init__(self, net):

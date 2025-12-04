@@ -1,8 +1,5 @@
-# fileName: config.py
 """
 Configuration file for power flow calculation.
-Optimized for faster OPF convergence using ACRL model.
-Corrected Generation Costs based on specific dataset types.
 """
 
 # ========== Network Constants ==========

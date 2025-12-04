@@ -1,7 +1,6 @@
 """
-Grid Modeler - A factory class to load, preprocess, and construct the static 
+Grid building - load, preprocess, and construct the static 
 pandapower base network (net_0) with nameplate capacities.
-Integrates functionality of DataLoader, DataPreprocessor, ExternalGridManager, and NetworkBuilder.
 """
 import pandas as pd
 import numpy as np
