@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generation Capacity Scenario Designer - Final Polished Version</title>
+    <style>
+        /* 1. Global and Body Optimization */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            margin: 15px;
+            background-color: #f4f7f9; 
+            color: #333; 
+            font-size: 14px; 
+        }
+        h1 { 
+            color: #004d99; 
+            border-bottom: 3px solid #004d99; 
+            padding-bottom: 8px; 
+            margin: 0 0 15px 0;
+            font-size: 1.6em;
+        }
+        
+        /* 2. Top Layout Optimization */
+        .top-controls { display: flex; gap: 20px; margin-bottom: 15px; }
+        .load-control, .balance-box { padding: 12px; border-radius: 6px; flex-grow: 1; min-width: 300px; }
+        
+        /* Load Control Panel */
+        .load-control { background-color: #e9f7ef; border: 1px solid #d4edda; }
+        .load-control h3 { margin: 0 0 8px 0; color: #007bff; font-size: 1.2em; }
+        .load-input-group { margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+        .load-input-group p { margin: 0; }
+        .load-label { width: 150px; text-align: left; margin-right: 5px; }
+        .load-output-summary p { margin: 3px 0; display: flex; justify-content: space-between; }
+
+        /* Balance Summary Panel */
+        .balance-box { background-color: #fff3cd; border: 1px solid #ffeeba; }
+        .balance-box h3 { margin: 0 0 8px 0; color: #856404; font-size: 1.2em; }
+        .balance-box p { margin: 3px 0; }
+        .balance-box hr { margin: 8px 0; border-top: 1px solid #ddd; }
+        .balance-box .balance-value { font-size: 1.3em; font-weight: bold; }
+
+        /* 3. Table Styles */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; background-color: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid #ddd; }
+        th { background-color: #e0f0ff; color: #004d99; font-weight: bold; text-align: center; }
+        td:nth-child(1) { text-align: left; } 
+        
+        /* Input Styles */
+        .input-cf { width: 45px; padding: 4px; text-align: right; border: 1px solid #ccc; border-radius: 3px; font-size: 0.9em; } 
+        .load-control .input-cf { width: 70px; }
+        
+        /* Total Row Styles */
+        .total-row td { font-weight: bold; background-color: #cce5ff; border-top: 2px solid #004d99; padding: 7px 8px; } 
+        .total-row td:last-child { font-weight: bold; } 
+
+        /* 4. Export Section Styles */
+        #exportSection { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background-color: #f0f0f8; 
+            border: 1px solid #c9c9d4; 
+            border-radius: 6px;
+        }
+        #exportSection h3 { color: #5a5a7a; margin-top: 0; }
+        #scenarioDescription { padding: 4px; border: 1px solid #ccc; border-radius: 3px; }
+        #codeOutput { 
+            width: 100%; 
+            height: 250px; 
+            margin-top: 10px; 
+            border: 1px solid #ccc; 
+            font-family: monospace; 
+            font-size: 0.9em; 
+            padding: 10px; 
+            box-sizing: border-box;
+        }
+        .generate-button { 
+            padding: 8px 15px; 
+            background-color: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer;
+        }
+        .generate-button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+
+    <h1>⚡ Generation Capacity Scenario Designer (CF Analysis)</h1>
+    
+    <div class="top-controls">
+        
+        <div class="load-control">
+            <h3>Load and Output Control</h3>
+            
+            <div class="load-input-group">
+                <span class="load-label">Baseline Load (Base Load):</span>
+                <input type="number" id="baseLoadInput" value="50074.00" min="0" step="10" oninput="calculateScenario()" class="input-cf"> MW
+            </div>
+            
+            <div class="load-input-group">
+                <span class="load-label"><label for="loadScale">Load Scale:</label></span>
+                <input type="number" id="loadScale" value="1.00" min="0" step="0.01" oninput="calculateScenario()" class="input-cf">
+            </div>
+
+            <hr style="border-top: 1px solid #ccc; margin: 10px 0;">
+
+            <div class="load-output-summary">
+                <p>Sustainable Energy Output: <span id="sustainableOutput" class="zero">0.00%</span></p>
+                <p>Conventional Energy Output: <span id="conventionalOutput" class="zero">0.00%</span></p>
+            </div>
+        </div>
+
+        <div class="balance-box">
+            <h3>Current Supply-Demand Balance Summary (Summary)</h3>
+            <p>Scaled Load: <span id="scaledLoadDisplay" class="zero">0.00</span> MW</p>
+            <p>Total Generation: <span id="totalGenerationDisplay" class="zero">0.00</span> MW</p>
+            <hr>
+            <p>Balance: <span id="balanceDisplay" class="balance-value zero">0.00</span> MW</p>
+        </div>
+
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="text-align: left;">Generation Type</th>
+                <th>Capacity (MVA)</th>
+                <th>Baseline CF (Editable)</th>
+                <th>Input CF (New Scenario)</th>
+                <th>Actual (MW) (New Scenario)</th>
+                <th>MW Change (vs Baseline)</th>
+                <th>Output Share (%)</th>
+            </tr>
+        </thead>
+        <tbody id="scenarioTableBody">
+            </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td style="text-align: left;">Total</td>
+                <td id="totalCapacity"></td>
+                <td></td>
+                <td></td>
+                <td id="totalActualNew"></td>
+                <td id="totalMWChange"></td>
+                <td id="totalShare">100.00%</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div id="exportSection">
+        <h3>📤 Export Current Scenario as Python Snippet</h3>
+        <div style="display: flex; gap: 20px; margin-bottom: 10px;">
+            <label>Scenario Name (Key): 
+                <input type="text" id="scenarioKey" value="my_new_scenario" class="input-cf" style="width: 150px;">
+            </label>
+            <label style="flex-grow: 1;">Description: 
+                <input type="text" id="scenarioDescription" value="A scenario generated from the designer." style="width: 90%;">
+            </label>
+        </div>
+        
+        <button onclick="generateCodeSnippet()" class="generate-button">Generate Code</button>
+        
+        <textarea id="codeOutput" readonly></textarea>
+    </div>
+
+
+    <script>
+        // --- 1. Data Structure ---
+        const SCENARIO_DATA = [
+            // Category 1: Sustainable
+            { type: 'solar radiant energy', capacity: 105915.19, baselineCF: 0.07, category: 1 },
+            { type: 'wind_onshore', capacity: 68498.49, baselineCF: 0.20, category: 1 },
+            { type: 'biomass', capacity: 9154.88, baselineCF: 0.50, category: 1 },
+            { type: 'wind_offshore', capacity: 6549.61, baselineCF: 0.37, category: 1 },
+            { type: 'water', capacity: 5416.20, baselineCF: 0.37, category: 1 },
+            { type: 'warmth', capacity: 2317.14, baselineCF: 0.19, category: 1 },
+            { type: 'non-biogenic waste', capacity: 2202.25, baselineCF: 0.34, category: 1 },
+            { type: 'hydrogen', capacity: 4.26, baselineCF: 0.01, category: 1 },
+            // Category 2: Conventional
+            { type: 'natural gas', capacity: 35765.69, baselineCF: 0.15, category: 2 },
+            { type: 'coal', capacity: 16392.36, baselineCF: 0.35, category: 2 },
+            { type: 'brown coal', capacity: 15895.57, baselineCF: 0.45, category: 2 },
+            { type: 'petroleum products', capacity: 7694.70, baselineCF: 0.12, category: 2 },
+            { type: 'other gases', capacity: 2624.83, baselineCF: 0.10, category: 2 },
+            // Category 3: Storage
+            { type: 'storage', capacity: 20581.05, baselineCF: 0.00, category: 3 }
+        ].sort((a, b) => a.category - b.category);
+
+        let totalCapacityMVA = SCENARIO_DATA.reduce((sum, item) => sum + item.capacity, 0);
+
+
+        // --- 2. Core Functions ---
+
+        /** Formats number with two decimal places and thousand separators */
+        function formatNumber(num) {
+            if (num === null || num === undefined || isNaN(num)) return 'N/A';
+            return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        
+        /** Formats number as percentage */
+        function formatPercentage(num) {
+            if (isNaN(num)) return '0.00%';
+            return num.toFixed(2) + '%';
+        }
+
+        /** Gets CSS class for balance display */
+        function getBalanceClass(value) {
+            if (value > 0.01) return 'positive';
+            if (value < -0.01) return 'negative';
+            return 'zero';
+        }
+        
+        /** Sanitizes CF value to be between 0.00 and 1.00 */
+        const sanitizeCF = (cf) => {
+            if (isNaN(cf) || cf < 0) return 0;
+            if (cf > 1.0) return 1.0;
+            return cf;
+        };
+
+
+        /** Renders the initial table structure */
+        function renderTable() {
+            const tbody = document.getElementById('scenarioTableBody');
+            tbody.innerHTML = '';
+            
+            SCENARIO_DATA.forEach((item, index) => {
+                const row = tbody.insertRow();
+                
+                row.insertCell().textContent = item.type;
+                row.insertCell().textContent = formatNumber(item.capacity);
+                
+                // 3. Baseline CF (Editable)
+                const baselineCFCell = row.insertCell();
+                baselineCFCell.innerHTML = `<input type="number" id="baselineCF-${index}" class="input-cf" 
+                                                    value="${item.baselineCF.toFixed(2)}" 
+                                                    min="0.00" max="1.00" step="0.01" 
+                                                    oninput="calculateScenario()">`;
+                
+                // 4. Input CF (New Scenario)
+                const newCFCell = row.insertCell();
+                newCFCell.innerHTML = `<input type="number" id="newCF-${index}" class="input-cf" 
+                                               value="${item.baselineCF.toFixed(2)}" 
+                                               min="0.00" max="1.00" step="0.01" 
+                                               oninput="calculateScenario()">`;
+                
+                // 5. Actual (MW) (New Scenario)
+                const newMWCell = row.insertCell();
+                newMWCell.id = `newMW-${index}`;
+                
+                // 6. MW Change (vs Baseline)
+                const changeMWCell = row.insertCell();
+                changeMWCell.id = `changeMW-${index}`;
+
+                // 7. Output Share (%)
+                const shareCell = row.insertCell();
+                shareCell.id = `share-${index}`;
+            });
+
+            document.getElementById('totalCapacity').textContent = formatNumber(totalCapacityMVA);
+        }
+
+        /** Reads inputs, performs all calculations, and updates the display */
+        function calculateScenario() {
+            let totalActualNew = 0;
+            let totalMWChange = 0;
+            let sustainableMW = 0; 
+            let conventionalMW = 0; 
+            
+            const actualMWs = []; 
+
+            // 1. Read editable load parameters
+            const loadScale = parseFloat(document.getElementById('loadScale').value) || 0;
+            const baseLoadValue = parseFloat(document.getElementById('baseLoadInput').value) || 0;
+            
+            SCENARIO_DATA.forEach((item, index) => {
+                // Read and sanitize CF inputs
+                const baselineCFInput = document.getElementById(`baselineCF-${index}`);
+                const newCFInput = document.getElementById(`newCF-${index}`);
+                
+                let currentBaselineCF = parseFloat(baselineCFInput.value);
+                let currentNewCF = parseFloat(newCFInput.value);
+
+                // Enforce CF bounds and update input fields
+                currentBaselineCF = sanitizeCF(currentBaselineCF);
+                baselineCFInput.value = currentBaselineCF.toFixed(2);
+                
+                currentNewCF = sanitizeCF(currentNewCF);
+                newCFInput.value = currentNewCF.toFixed(2);
+                
+                // 2. Key Calculations
+                const newBaselineMW = item.capacity * currentBaselineCF;
+                const newActualMW = item.capacity * currentNewCF;
+                const mwChange = newActualMW - newBaselineMW;
+                
+                actualMWs[index] = newActualMW; 
+                
+                // 3. Accumulate Totals
+                totalActualNew += newActualMW;
+                totalMWChange += mwChange;
+
+                // Accumulate by Energy Category
+                if (item.category === 1) { // Sustainable
+                    sustainableMW += newActualMW;
+                } else if (item.category === 2) { // Conventional
+                    conventionalMW += newActualMW;
+                }
+
+                // 4. Update Table Row (MW & MW Change)
+                document.getElementById(`newMW-${index}`).textContent = formatNumber(newActualMW);
+                const changeCell = document.getElementById(`changeMW-${index}`);
+                changeCell.textContent = formatNumber(mwChange);
+                changeCell.className = getBalanceClass(mwChange);
+            });
+
+            // 5. Second Pass: Calculate and update Output Share (%)
+            const totalNonZero = totalActualNew > 0 ? totalActualNew : 1; 
+            
+            SCENARIO_DATA.forEach((item, index) => {
+                const sharePct = (actualMWs[index] / totalNonZero) * 100;
+                document.getElementById(`share-${index}`).textContent = formatPercentage(sharePct);
+            });
+
+
+            // 6. Calculate and update Summary
+            const scaledLoad = baseLoadValue * loadScale;
+            const balance = totalActualNew - scaledLoad;
+            
+            const sustainablePct = (sustainableMW / totalNonZero) * 100;
+            const conventionalPct = (conventionalMW / totalNonZero) * 100;
+
+            // Update Summary displays
+            document.getElementById('totalActualNew').textContent = formatNumber(totalActualNew);
+            document.getElementById('totalMWChange').textContent = formatNumber(totalMWChange);
+            document.getElementById('scaledLoadDisplay').textContent = formatNumber(scaledLoad);
+            document.getElementById('totalGenerationDisplay').textContent = formatNumber(totalActualNew);
+            
+            // Update percentage displays
+            document.getElementById('sustainableOutput').textContent = formatPercentage(sustainablePct);
+            document.getElementById('conventionalOutput').textContent = formatPercentage(conventionalPct);
+            
+            const balanceDisplay = document.getElementById('balanceDisplay');
+            balanceDisplay.textContent = formatNumber(balance);
+            balanceDisplay.className = getBalanceClass(balance);
+        }
+        
+        /** Generates the Python code snippet for the current scenario */
+        function generateCodeSnippet() {
+            const key = document.getElementById('scenarioKey').value.trim().replace(/ /g, '_').toLowerCase() || 'my_new_scenario';
+            const description = document.getElementById('scenarioDescription').value.trim();
+            const loadScale = parseFloat(document.getElementById('loadScale').value).toFixed(2);
+            
+            let cf_dict_content = '';
+            
+            // 1. Collect current CFs from the table inputs
+            SCENARIO_DATA.forEach((item, index) => {
+                const input = document.getElementById(`newCF-${index}`);
+                const cf_value = parseFloat(input.value).toFixed(2);
+                
+                cf_dict_content += `            '${item.type}': ${cf_value},\n`;
+            });
+            
+            // 2. Add 'pumped storage' for structure consistency (using 'storage' CF as default)
+            const storageIndex = SCENARIO_DATA.findIndex(item => item.type === 'storage');
+            const storageCFInput = document.getElementById(`newCF-${storageIndex}`);
+            const pumpedStorageCF = storageCFInput ? parseFloat(storageCFInput.value).toFixed(2) : '0.08';
+            
+            cf_dict_content += `            'pumped storage': ${pumpedStorageCF},\n`;
+            
+            // 3. Construct the final dictionary string
+            const codeSnippet = `
+    '${key}': {
+        'name': '${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}',
+        'description': '${description}',
+        'capacity_factors': {
+${cf_dict_content.trim()}
+        },
+        'load_scale': ${loadScale},
+    },
+    `.trim();
+
+            document.getElementById('codeOutput').value = codeSnippet;
+        }
+
+
+        // 7. Page Initialization
+        window.onload = function() {
+            renderTable();
+            calculateScenario(); 
+        };
+
+    </script>
+
+</body>
+</html>
