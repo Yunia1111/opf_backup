@@ -22,7 +22,7 @@ class DB:
 
 	def __init__(self):
 
-		with open(Path.home() / 'creds' / 'ma_pfg_mdb_prod', 'r') as credfile:
+		with open(Path.home() / '.pfg_mdb_url', 'r') as credfile:
 			db_access_url = credfile.read().rstrip()
 
 		self.client = MongoClient(db_access_url)

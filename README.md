@@ -31,6 +31,11 @@ python -m venv .venv            # Create Virtual Env
 pip install -r requirements.txt # Install requirements
 ```
 
+Then, configure your database credentials:
+```sh
+echo "mongodb+srv://<user>:<password>@<mongodb_server>/" > ~/.pfg_mdb_url
+```
+
 ## First Run
 
 ```sh
