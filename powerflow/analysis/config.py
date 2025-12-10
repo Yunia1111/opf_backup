@@ -30,7 +30,7 @@ TRAFO_PFE_KW = 60
 TRAFO_I0_PERCENT = 0.1
 
 # ========== File Paths ==========
-DATA_DIR = "Data/"
+DATA_DIR = "data/intermediate_model"
 OUTPUT_DIR = "results/"
 
 # ========== Power Flow (PF) Settings ==========
