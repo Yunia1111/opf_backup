@@ -6,12 +6,12 @@ import sys
 import os
 import pandas as pd
 import time
-import config
-import grid_building
-import opf
-import report_export
-import visualization
-import Injections
+from . import config
+from . import grid_building
+from . import opf
+from . import report_export
+from . import visualization
+from . import Injections
 
 # Try importing scenarios, handle missing file gracefully
 try:
