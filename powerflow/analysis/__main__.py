@@ -15,7 +15,7 @@ from . import Injections
 
 # Try importing scenarios, handle missing file gracefully
 try:
-    from scenarios import SCENARIOS # Updated Import
+    from .scenarios import SCENARIOS # Updated Import
 except ImportError:
     print("CRITICAL ERROR: 'scenarios.py' not found.")
     print("Please ensure scenarios.py exists with a dictionary named SCENARIOS.")
@@ -25,33 +25,33 @@ def main():
     print("\n" + "="*80)
     print("GERMAN GRID MULTI-SCENARIO OPF ANALYSIS (V2.1 - Production)")
     print("="*80 + "\n")
-    
+
     # Pre-flight check
     if not os.path.exists(config.DATA_DIR):
         print(f"ERROR: Data directory '{config.DATA_DIR}' not found.")
         sys.exit(1)
 
     all_results = []
-    solved_networks = {} 
-    
+    solved_networks = {}
+
     try:
         # ==============================================================================
         # STEP 1: BUILD STATIC BASE NETWORK (net_0)
         # ==============================================================================
         print("[STEP 1/2] Building static base network (net_0)...")
         print("─" * 80)
-        
+
         # Updated Class Instantiation
         modeler = grid_building.GridModeler()
         base_net, external_grids = modeler.create_base_network()
-        
+
         total_gen_nameplate = base_net.gen['p_mw'].sum() + base_net.sgen['p_mw'].sum()
         total_load_nameplate = base_net.load['p_mw'].sum()
         print(f"\n  ✓ Base network (net_0) ready: {len(base_net.bus)} buses, "
               f"{len(base_net.line)} lines, {len(base_net.gen)} PV, "
               f"{len(base_net.sgen)} PQ, {len(base_net.storage)} storage")
         print(f"  > Nameplate Capacity: Gen={total_gen_nameplate:,.0f} MW, Load={total_load_nameplate:,.0f} MW")
-        
+
         # Updated Class Instantiation
         opf_engine = opf.OPFEngine(base_net, external_grids)
 
@@ -61,31 +61,31 @@ def main():
         print("\n" + "="*80)
         print("[STEP 2/2] Running scenarios with OPF Engine...")
         print("="*80)
-        
+
         # --- SCENARIO SELECTION ---
         # Run ALL scenarios defined in scenarios.py
-        scenario_list = list(SCENARIOS.keys()) 
-        #scenario_list = ['average_of_2024']
-        
+        #scenario_list = list(SCENARIOS.keys())
+        scenario_list = ['average_of_2024']
+
         print(f"\nTotal scenarios to run: {len(scenario_list)}")
         print(f"Scenarios: {', '.join(scenario_list)}\n")
-        
+
         for i, scenario_name in enumerate(scenario_list, 1):
             scenario_start_time = time.time()
-            
+
             print("─" * 80)
             print(f"[{i}/{len(scenario_list)}] SCENARIO: {scenario_name.upper()}")
-            
+
             # Run the scenario through the OPF Engine
             scenario_net, scenario_info, converged = opf_engine.run_scenario(scenario_name)
-            
+
             scenario_time = time.time() - scenario_start_time
-            
+
             # Calculate results
             scenario_results = calculate_scenario_results(scenario_net, scenario_info, scenario_time)
             scenario_results['scenario'] = scenario_name
             all_results.append(scenario_results)
-            
+
             # Print intermediate results
             print_scenario_summary(scenario_results)
 
@@ -98,25 +98,25 @@ def main():
             solved_networks[scenario_name] = scenario_net
 
             print(f"  ✓ OPF converged ({scenario_time:.1f}s). Exporting results...")
-            
+
             # Updated Class Instantiation
             exporter = report_export.ReportGenerator(scenario_net)
             visualizer = visualization.Visualizer()
-            
+
             exporter.export_all(scenario_name)
             visualizer.create_map(scenario_net, scenario_info)
-        
+
         # ==============================================================================
         # STEP 3: COMPARISON SUMMARY
         # ==============================================================================
         print("\n" + "="*80)
         print("SCENARIO COMPARISON SUMMARY")
         print("="*80 + "\n")
-        
+
         if all_results:
             df_results = pd.DataFrame(all_results)
             print_comparison_table(df_results)
-            
+
             os.makedirs(config.OUTPUT_DIR, exist_ok=True)
             comparison_file = f"{config.OUTPUT_DIR}scenario_comparison.csv"
             df_results.to_csv(comparison_file, index=False, float_format='%.2f')
@@ -131,38 +131,38 @@ def main():
             print("\n" + "="*80)
             print("MANUAL INJECTION CAPACITY ANALYSIS")
             print("="*80)
-            
+
             # Updated Class Instantiation
             analyzer = Injections.InjectionAnalyzer(base_net, external_grids)
-            
+
             # --- USER INPUT: Coordinates (Example: Near Munich) ---
             target_lat = 48.13
             target_lon = 11.58
-            
+
             # --- USER INPUT: Background Scenario ---
             # Automatically pick the first successful scenario if 'average_of_2024' isn't available
             INJECTION_SCENARIO = 'average_of_2024'
             if INJECTION_SCENARIO not in solved_networks and len(solved_networks) > 0:
                 INJECTION_SCENARIO = list(solved_networks.keys())[0]
                 print(f"  ! Default scenario not found, switching to: {INJECTION_SCENARIO}")
-            
+
             base_result_net = None
-            
+
             if INJECTION_SCENARIO in solved_networks:
                 print(f"  ★ Warm Start Available: Using pre-calculated results from '{INJECTION_SCENARIO}'")
                 base_result_net = solved_networks[INJECTION_SCENARIO]
             else:
                 print(f"  ⚠ Warm Start NOT Available for '{INJECTION_SCENARIO}'.")
                 print(f"    Running Cold Start...")
-            
+
             analyzer.analyze_hosting_capacity(
-                target_lat, target_lon, 
+                target_lat, target_lon,
                 scenario_name=INJECTION_SCENARIO,
                 base_result_net=base_result_net
             )
         else:
             print("\n[INFO] Injection Analysis skipped (RUN_INJECTION_ANALYSIS = False).")
-        
+
     except Exception as e:
         print(f"\n✗ Error during main execution: {e}")
         import traceback
@@ -176,30 +176,30 @@ def calculate_scenario_results(net, scenario_info, solve_time):
         gen_p = net.res_gen[net.gen['type'] != 'border']['p_mw'].sum()
         sgen_p = net.res_sgen['p_mw'].sum()
         total_gen_domestic = gen_p + sgen_p
-        
+
         storage_p = net.res_storage['p_mw']
         storage_discharge = storage_p[storage_p > 0].sum()
         storage_charge = abs(storage_p[storage_p < 0].sum())
-        
+
         border_p = net.res_gen[net.gen['type'] == 'border']['p_mw'].sum()
         slack_p = net.res_ext_grid['p_mw'].sum()
         net_import = border_p + slack_p
-        
+
         fixed_load = net.load['p_mw'].sum()
-        
+
         line_losses = net.res_line['pl_mw'].sum() if len(net.res_line) > 0 else 0
         trafo_losses = net.res_trafo['pl_mw'].sum() if len(net.res_trafo) > 0 else 0
         total_losses = line_losses + trafo_losses
-        
+
         v_low = (net.res_bus['vm_pu'] < config.BUS_MIN_VM_PU).sum()
         v_high = (net.res_bus['vm_pu'] > config.BUS_MAX_VM_PU).sum()
         voltage_violations = v_low + v_high
-        
+
         max_line_loading = net.res_line['loading_percent'].max() if len(net.res_line) > 0 else 0
         overloaded_lines = (net.res_line['loading_percent'] > 100).sum() if len(net.res_line) > 0 else 0
-        
+
         total_cost = net.res_cost if hasattr(net, 'res_cost') else 0
-        
+
         return {
             'converged': hasattr(net, 'OPF_converged') and net.OPF_converged,
             'solve_time_s': solve_time,
@@ -241,24 +241,24 @@ def print_scenario_summary(results):
     print(f"    Storage Charge:    {stor_chg:>10.1f} MW (-)")
     print(f"    Losses:            {losses:>10.1f} MW ({loss_pct:.2f}%)")
     print(f"    Max Line Loading:  {results.get('max_line_loading_pct',0):>10.1f}%")
-    
+
     if results.get('overloaded_lines', 0) > 0:
         print(f"    ⚠ Overloaded Lines: {results['overloaded_lines']}")
 
 def print_comparison_table(df):
     if df.empty: return
     display_cols = [
-        'scenario', 'gen_load_ratio', 'total_cost_eur_per_h', 
+        'scenario', 'gen_load_ratio', 'total_cost_eur_per_h',
         'line_losses_mw', 'loss_pct', 'max_line_loading_pct',
         'voltage_violations', 'converged', 'solve_time_s'
     ]
     df_display = df[display_cols].copy()
     df_display['scenario'] = df_display['scenario'].str.replace('_', ' ').str.title()
-    
+
     print(f"{'Scenario':<25} {'Gen/Load':>9} {'Cost(€/h)':>12} {'Loss(MW)':>10} "
           f"{'Loss%':>7} {'MaxLoad%':>9} {'VViol':>6} {'Status':>8} {'Time(s)':>8}")
     print("─" * 120)
-    
+
     for _, row in df_display.iterrows():
         status = "✓" if row['converged'] else "✗"
         cost_str = f"{row['total_cost_eur_per_h']:,.0f}" if pd.notna(row['total_cost_eur_per_h']) else "N/A"

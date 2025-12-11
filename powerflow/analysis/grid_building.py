@@ -1,19 +1,19 @@
 """
-Grid building - load, preprocess, and construct the static 
+Grid building - load, preprocess, and construct the static
 pandapower base network (net_0) with nameplate capacities.
 """
 import pandas as pd
 import numpy as np
 import pandapower as pp
-import pandapower.topology as top  
-import networkx as nx            
+import pandapower.topology as top
+import networkx as nx
 import os
 import pickle
 import json
-import config
+from . import config
 
 class GridModeler:
-    
+
     def __init__(self):
         self.buses = None
         self.connections = None
@@ -24,11 +24,11 @@ class GridModeler:
         self.base_net = None
         self.bus_mapping = {}
         self.ext_grid_list = []
-        
+
     def create_base_network(self):
         cache_path = os.path.join(config.OUTPUT_DIR, config.NETWORK_CACHE_FILE)
         disc_cache_path = os.path.join(config.OUTPUT_DIR, "disconnected_buses.json")
-        
+
         # 1. Check if we can load from cache
         if not config.FORCE_NETWORK_REBUILD and os.path.exists(cache_path):
             print(f"1. Loading base network from cache: {cache_path}")
@@ -39,36 +39,36 @@ class GridModeler:
                 return self.base_net, self.ext_grid_list
             except Exception as e:
                 print(f"  ⚠ Cache load failed ({e}), falling back to rebuild.")
-        
+
         # ====================================================
         # IF NO CACHE OR FORCE REBUILD
         # ====================================================
         print("1. Loading raw data (Rebuilding network)...")
         self._load_data()
-        
+
         print("2. Preprocessing data (cleaning & merging)...")
         self._preprocess_data()
-        
+
         print("3. Configuring external grids...")
         self._setup_external_grids()
-        
+
         print("4. Building pandapower base net (nameplate capacity)...")
         self.base_net = self._build_network_from_components()
-        
+
         # === Connectivity Check & Disconnected Component Handling ===
         print("  > Checking network connectivity...")
         mg = top.create_nxgraph(self.base_net)
         islands = list(nx.connected_components(mg))
         main_island_buses = max(islands, key=len)
-        
+
         # Identify disconnected buses
         all_buses = set(self.base_net.bus.index)
         connected_buses_set = set(main_island_buses)
         disconnected_indices = list(all_buses - connected_buses_set)
-        
+
         print(f"  > Found {len(islands)} components. Keeping largest ({len(main_island_buses)} buses).")
         print(f"  > Removing {len(disconnected_indices)} disconnected buses...")
-        
+
         # Save disconnected buses to JSON for visualization
         if len(disconnected_indices) > 0:
             disc_data = []
@@ -83,7 +83,7 @@ class GridModeler:
                         'lat': float(geo[0]),
                         'lon': float(geo[1])
                     })
-            
+
             os.makedirs(config.OUTPUT_DIR, exist_ok=True)
             with open(disc_cache_path, 'w') as f:
                 json.dump(disc_data, f)
@@ -94,15 +94,15 @@ class GridModeler:
 
         # Remove them from the OPF network
         self.base_net = pp.select_subnet(self.base_net, buses=main_island_buses)
-        
+
         # === Save to Cache ===
         print(f"  > Saving built network to cache: {cache_path} ...")
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-        
+
         with open(cache_path, 'wb') as f:
             pickle.dump((self.base_net, self.ext_grid_list), f)
         print("  ✓ Network cached.")
-        
+
         return self.base_net, self.ext_grid_list
 
     # --- Data Loading ---
@@ -119,21 +119,21 @@ class GridModeler:
         self.generators = _load_csv("generators.csv")
         self.loads = _load_csv("loads.csv")
         self.transformers = _load_csv("transformers.csv")
-        
+
         try:
             self.hvdc_projects = _load_csv("hvdc_projects.csv")
             print(f"  > Found HVDC projects file: {len(self.hvdc_projects)} lines.")
         except FileNotFoundError:
             self.hvdc_projects = None
-            print("  > No HVDC projects file found (skipping).")    
-        
+            print("  > No HVDC projects file found (skipping).")
+
         try:
             self.pst_projects = _load_csv("pst_projects.csv")
             print(f"  > Found PST projects file: {len(self.pst_projects)} lines.")
         except FileNotFoundError:
             self.pst_projects = None
             print("  > No PST projects file found (skipping).")
-            
+
         try:
             self.external_grids = _load_csv("external_grids.csv")
         except FileNotFoundError:
@@ -144,7 +144,7 @@ class GridModeler:
         pf = config.POWER_FACTOR
         tan_phi = np.tan(np.arccos(pf))
         self.loads['q_mvar'] = self.loads['p_mw'] * tan_phi
-        
+
         self.generators = self.generators.groupby(
             ['bus_id', 'generation_type'], as_index=False
         ).agg({
@@ -152,22 +152,22 @@ class GridModeler:
             'generator_name': lambda x: f"merged_{x.iloc[0].split('_')[1] if '_' in x.iloc[0] else 'gen'}_{len(x)}units",
             'commissioning_year': 'first'
         })
-        
+
         self.connections.loc[:, 'parallel_cables_per_phase'] = self.connections['parallel_cables_per_phase'].fillna(1)
         self.connections['r_ohm_per_km'] = self.connections['r_ohm_per_km'] / self.connections['parallel_cables_per_phase']
         self.connections['x_ohm_per_km'] = self.connections['x_ohm_per_km'] / self.connections['parallel_cables_per_phase']
         self.connections['c_nf_per_km'] = self.connections['c_nf_per_km'] * self.connections['parallel_cables_per_phase']
         self.connections['max_i_ka'] = self.connections['max_i_ka'] * self.connections['parallel_cables_per_phase']
         self.connections['parallel'] = 1
-        
-        group_cols = ['from_bus_id', 'to_bus_id', 'length_km', 'r_ohm_per_km', 
+
+        group_cols = ['from_bus_id', 'to_bus_id', 'length_km', 'r_ohm_per_km',
                      'x_ohm_per_km', 'c_nf_per_km', 'max_i_ka', 'line_type', 'ac_dc_type']
         self.connections = self.connections.groupby(group_cols, as_index=False, dropna=False).agg({
             'parallel': 'sum', 'name': 'first', 'geographic_coordinates': 'first',
             'parallel_cables_per_phase': 'first', 'switch_group': 'first',
             'commissioning_year': 'first'
         })
-        
+
         self.transformers['vk_percent'] = config.TRAFO_VK_PERCENT
         self.transformers['vkr_percent'] = config.TRAFO_VKR_PERCENT
         self.transformers['pfe_kw'] = config.TRAFO_PFE_KW
@@ -180,7 +180,7 @@ class GridModeler:
                 bus_id = row['bus_id']
                 if bus_id not in self.buses['bus_id'].values:
                     continue
-                
+
                 grid_type = row.get('grid_type', 'border')
                 va_degree = 0.0 if grid_type == 'main_slack' else None
                 slack_weight = 1.0 if grid_type == 'main_slack' else 0.0
@@ -201,7 +201,7 @@ class GridModeler:
     # --- Network Building ---
     def _build_network_from_components(self):
         net = pp.create_empty_network(name="German Grid Base")
-        
+
         target_vns = config.STANDARD_VOLTAGE_LEVELS
         buses_to_add = self.buses[self.buses['vn_kv'].isin(target_vns)].copy()
 
@@ -212,10 +212,10 @@ class GridModeler:
             )
             self.bus_mapping[bus['bus_id']] = idx
             net.bus.at[idx, 'geo'] = (bus['lat'], bus['lon'])
-            
+
         added_bus_pp_indices = set(net.bus.index)
         ext_grid_buses = set()
-            
+
         # 2. Add External Grids
         for eg in self.ext_grid_list:
             bus_idx = self.bus_mapping.get(eg['bus_id'])
@@ -232,14 +232,14 @@ class GridModeler:
                     p_limit_max = eg['max_p_mw']
                     p_limit_min = eg['min_p_mw']
                     sn_mva = max(abs(p_limit_max), abs(p_limit_min))
-                    if sn_mva == 0: sn_mva = 1000.0 
-                    
+                    if sn_mva == 0: sn_mva = 1000.0
+
                     pp.create_gen(
                         net, bus=bus_idx, p_mw=0.0, vm_pu=eg['vm_pu'],
-                        sn_mva=sn_mva, 
+                        sn_mva=sn_mva,
                         min_p_mw=p_limit_min, max_p_mw=p_limit_max,
-                        name=f"Border_{eg['country']}", 
-                        type='border', 
+                        name=f"Border_{eg['country']}",
+                        type='border',
                         controllable=True
                     )
                     net.gen.at[net.gen.index[-1], 'nameplate_p_mw'] = sn_mva
@@ -260,7 +260,7 @@ class GridModeler:
                 net.line.at[line_idx, 'cables_per_phase'] = line.get('parallel_cables_per_phase', 1)
                 if pd.notna(line.get('geographic_coordinates')):
                     net.line.at[line_idx, 'geo_coords'] = str(line['geographic_coordinates'])
-                    
+
         # 4. Add Transformers
         for _, trafo in self.transformers.iterrows():
             hv_bus = self.bus_mapping.get(trafo['hv_bus_id'])
@@ -274,13 +274,13 @@ class GridModeler:
                     vkr_percent=trafo['vkr_percent'], pfe_kw=trafo['pfe_kw'],
                     i0_percent=trafo['i0_percent'], name=trafo['transformer_id']
                 )
-        
+
         self._add_pst_transformers(net)
         self._add_hvdc_lines(net)
         self._add_generators_and_loads(net, ext_grid_buses)
-        
+
         return net
-    
+
     # --- Generators and Loads ---
     def _add_generators_and_loads(self, net, ext_grid_buses):
         pv_buses = self._select_pv_buses_strategy(net, ext_grid_buses)
@@ -289,14 +289,14 @@ class GridModeler:
             bus_idx = self.bus_mapping.get(gen['bus_id'])
             if bus_idx is None or bus_idx not in net.bus.index:
                 continue
-            
+
             nameplate_p = gen['p_mw']
             nameplate_sn = gen['sn_mva']
             gen_type = str(gen['generation_type']).lower()
-            
+
             if 'storage' in gen_type:
                 max_p = nameplate_p
-                max_e = nameplate_sn * 2 
+                max_e = nameplate_sn * 2
                 pp.create_storage(net, bus=bus_idx, p_mw=0, max_e_mwh=max_e,
                                   max_p_mw=max_p, min_p_mw=-max_p, q_mvar=0,
                                   sn_mva=nameplate_sn, name=gen['generator_name'], type=gen['generation_type'],
@@ -304,7 +304,7 @@ class GridModeler:
                 net.storage.at[net.storage.index[-1], 'nameplate_p_mw'] = max_p
                 net.storage.at[net.storage.index[-1], 'nameplate_sn_mva'] = nameplate_sn
                 continue
-            
+
             if bus_idx in pv_buses:
                 # PV Node
                 pp.create_gen(net, bus=bus_idx, p_mw=nameplate_p, vm_pu=gen['vm_pu'],
@@ -332,13 +332,13 @@ class GridModeler:
     def _select_pv_buses_strategy(self, net, ext_grid_buses):
         strategy = config.PV_CONTROL_STRATEGY
         pv_buses = set()
-        
+
         for _, gen in self.generators.iterrows():
             bus_id = gen['bus_id']
             bus_idx = self.bus_mapping.get(bus_id)
             if bus_idx is None or bus_idx in ext_grid_buses or bus_idx not in net.bus.index:
                 continue
-            
+
             bus_voltage = net.bus.at[bus_idx, 'vn_kv']
 
             if strategy == 'mixed':
@@ -349,9 +349,9 @@ class GridModeler:
                     pv_buses.add(bus_idx)
             elif strategy == 'all_gen_buses':
                 pv_buses.add(bus_idx)
-                
+
         return pv_buses
-    
+
     # --- PST and HVDC Helpers ---
     def _add_hvdc_lines(self, net):
         if self.hvdc_projects is None or len(self.hvdc_projects) == 0:
@@ -371,7 +371,7 @@ class GridModeler:
             if str(row.get('in_service', 'false')).lower() != 'true': continue
             from_bus = find_nearest(row['from_lat'], row['from_lon'])
             to_bus = find_nearest(row['to_lat'], row['to_lon'])
-            
+
             pp.create_dcline(net, from_bus=from_bus, to_bus=to_bus, p_mw=row['capacity_mw'],
                 loss_percent=1.5, loss_mw=0.5, vm_from_pu=1.0, vm_to_pu=1.0,
                 max_p_mw=row['capacity_mw'], min_q_from_mvar=-row['capacity_mw']*0.5,
@@ -395,11 +395,11 @@ class GridModeler:
         count = 0
         for _, row in self.pst_projects.iterrows():
             if str(row.get('in_service', 'false')).lower() != 'true': continue
-            
+
             from_candidates = get_nearest_indices(row['from_lat'], row['from_lon'], n=2)
             to_candidates = get_nearest_indices(row['to_lat'], row['to_lon'], n=2)
             from_bus, to_bus = from_candidates[0], to_candidates[0]
-            
+
             if from_bus == to_bus:
                 print(f"    ⚠ PST '{row['name']}' endpoints snapped to same bus ({from_bus}). Attempting fix...")
                 if len(to_candidates) > 1:
@@ -413,14 +413,14 @@ class GridModeler:
             vn_hv = net.bus.at[from_bus, 'vn_kv']
             vn_lv = net.bus.at[to_bus, 'vn_kv']
             range_deg = float(row.get('angle_range_deg', 30))
-            step_size = 2.0 
+            step_size = 2.0
             steps = int(range_deg / step_size)
-            
+
             pp.create_transformer_from_parameters(net, hv_bus=from_bus, lv_bus=to_bus,
                 sn_mva=float(row['sn_mva']), vn_hv_kv=vn_hv, vn_lv_kv=vn_lv,
                 vkr_percent=0.1, vk_percent=12.0, pfe_kw=10.0, i0_percent=0.05,
                 shift_degree=0.0, tap_phase_shifter=True, tap_side='hv', tap_neutral=0,
-                tap_min=-steps, tap_max=steps, tap_step_degree=step_size, tap_step_percent=0.0, 
+                tap_min=-steps, tap_max=steps, tap_step_degree=step_size, tap_step_percent=0.0,
                 name=row['name'], in_service=True)
             net.trafo.at[net.trafo.index[-1], 'controllable'] = True
             count += 1
