@@ -11,7 +11,7 @@ from . import grid_building
 from . import opf
 from . import report_export
 from . import visualization
-from . import Injections
+from . import injections
 
 # Try importing scenarios, handle missing file gracefully
 try:
@@ -133,7 +133,7 @@ def main():
             print("="*80)
 
             # Updated Class Instantiation
-            analyzer = Injections.InjectionAnalyzer(base_net, external_grids)
+            analyzer = injections.InjectionAnalyzer(base_net, external_grids)
 
             # --- USER INPUT: Coordinates (Example: Near Munich) ---
             target_lat = 48.13

@@ -31,7 +31,7 @@ TRAFO_I0_PERCENT = 0.1
 
 # ========== File Paths ==========
 DATA_DIR = "data/intermediate_model"
-OUTPUT_DIR = "results/"
+OUTPUT_DIR = "analysis/results/"
 
 # ========== Power Flow (PF) Settings ==========
 PF_MAX_ITERATION = 100
