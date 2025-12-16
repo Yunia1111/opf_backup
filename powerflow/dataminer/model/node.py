@@ -18,7 +18,9 @@ class Node:
 
 	def html(self):
 		return f"""
-		<b>{self.type}</b><br>
+		<div style="width:420px;text-align:center">
+			<b>{self.type}</b>
+		</div>
 		WayID: <a href="https://www.openstreetmap.org/way/{self.id}" target=_blank>{self.id}</a><br>
 		Location: {self.coords}<br>
 		Voltages: {', '.join([f"{v // 1000}kV" for v in self.voltages])}<br>

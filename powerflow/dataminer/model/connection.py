@@ -108,7 +108,7 @@ class WireType:
 			ampacity_per_system_kA = data["max_i_ka"]
 
 
-		self.conn_type = name
+		self.name = name
 
 		self.r_ohm_per_km = data["r_ohm_per_km"]
 		self.x_ohm_per_km = data["x_ohm_per_km"]
@@ -138,7 +138,7 @@ class Circuit:
 		self.dlr = None
 
 	def __repr__(self):
-		return f"{self.voltage//1000}kV {self.phases} phase, {self.cables} cables, {self.systems} systems"
+		return f"{self.voltage//1000}kV {self.phases} phase, {self.cables} cables, {self.systems} systems, {self.capacity}MVA, {self.ampacity}A, DLR: {self.dlr}A, Wire:{self.wire_type.name}"
 
 	def max_v(self):
 		return self.voltage
@@ -173,9 +173,14 @@ class Connection:
 
 	def html(self):
 		return f"""
-		<b>{self.type}</b><br>
+		<div style="width:420px;text-align:center">
+			<b>{self.type}</b>
+		</div>
 		WayID: <a href="https://www.openstreetmap.org/way/{self.id}" target=_blank>{self.id}</a><br>
-		Circuits: {len(self.circuits)}<br>
+		Circuits: {len(self.circuits)}
+		<ul>
+		{''.join([f"<li>{circuit}</li>" for circuit in self.circuits])}
+		</ul>
 		Voltages: {', '.join([f"{c.voltage // 1000}kV" for c in self.circuits])}<br>
 		Length: {int(self.length)}m<br>
 		Operator: {self.operator}<br>
