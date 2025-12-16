@@ -29,7 +29,7 @@ class CircuitCountError(ValueError):
 
 class WireType:
 
-	# QUESTION: Can i haz better cable data? (rough ones are LLM generated)
+	# Use ampacities from adjacient cables if missing
 
 	conn_types = {
 		"243-AL1/39-ST1A 110.0": {
@@ -70,37 +70,76 @@ class WireType:
 		}
 	}
 
-	def __init__(self, conn_type, voltage):
+	def __init__(self, conn_type, voltage, ampacity_per_system=None):
 
-		if voltage < 150000:
-			t = "243-AL1/39-ST1A 110.0" if conn_type == ConnType.LINE else "N2XS(FL)2Y 1x240 RM/35 64/110 kV"
-		elif voltage < 250000:
-			t = "490-AL1/64-ST1A 220.0" if conn_type == ConnType.LINE else "XLPE 1×1600 Cu 220 (rough)"
+		if ampacity_per_system:
+
+			# TODO: Build a config system+module for this stuff
+			with open("data/source_data/wires.json") as f:
+				wire_types = json.load(f)
+
+			wire_types = wire_types["lines" if conn_type == ConnType.LINE else "cables"]
+			wire_types = wire_types[str(voltage)] # TODO: Handle nonexistant, e.g. 110
+
+			ampacity_key = "max_i_ka_air" if conn_type == ConnType.LINE else "max_i_ka_ground"
+
+			ampacity_per_system_kA = ampacity_per_system / 1000
+
+			name = None
+			data = None
+			for n, d in wire_types.items():
+				# NOTE: Wire type lists are sorted, so this works. Keep them sorted.
+				name = n
+				data = d
+				if d[ampacity_key] > ampacity_per_system_kA:
+					break
+
 		else:
-			t = "490-AL1/64-ST1A 380.0" if conn_type == ConnType.LINE else "XLPE 1x2500 Cu 380 (rough)"
 
-		self.conn_type = t
+			if voltage < 150000:
+				name = "243-AL1/39-ST1A 110.0" if conn_type == ConnType.LINE else "N2XS(FL)2Y 1x240 RM/35 64/110 kV"
+			elif voltage < 250000:
+				name = "490-AL1/64-ST1A 220.0" if conn_type == ConnType.LINE else "XLPE 1×1600 Cu 220 (rough)"
+			else:
+				name = "490-AL1/64-ST1A 380.0" if conn_type == ConnType.LINE else "XLPE 1x2500 Cu 380 (rough)"
 
-		self.r_ohm_per_km = __class__.conn_types[t]["r_ohm_per_km"]
-		self.x_ohm_per_km = __class__.conn_types[t]["x_ohm_per_km"]
-		self.c_nf_per_km  = __class__.conn_types[t]["c_nf_per_km"]
-		self.max_i_ka     = __class__.conn_types[t]["max_i_ka"]
+			data = __class__.conn_types[name]
+
+			ampacity_per_system_kA = data["max_i_ka"]
+
+
+		self.conn_type = name
+
+		self.r_ohm_per_km = data["r_ohm_per_km"]
+		self.x_ohm_per_km = data["x_ohm_per_km"]
+		self.c_nf_per_km  = data["c_nf_per_km"]
+		self.max_i_ka     = round(ampacity_per_system_kA, 3)
 
 
 
 
 class Circuit:
+
 	def __init__(self, voltage, frequency, phases, cables, wire_type):
+
 		self.voltage   	= voltage
 		self.frequency 	= frequency
 		self.phases    	= phases
 		self.cables    	= cables
 		self.wire_type  = wire_type
+
 		if (cables % phases) != 0:
 			raise CablesPerPhaseError(f"Circuit: cable ({cables}) and phase ({phases}) count don't match.")
-		self.cables_per_phase = cables // phases
+
+		self.systems = cables // phases
+
+		self.capacity = None
+		self.ampacity = None
+		self.dlr = None
+
 	def __repr__(self):
-		return f"{self.voltage//1000}kV {self.phases} phase, {self.cables} cables, {self.cables_per_phase} cables/phase"
+		return f"{self.voltage//1000}kV {self.phases} phase, {self.cables} cables, {self.systems} systems"
+
 	def max_v(self):
 		return self.voltage
 
@@ -144,7 +183,7 @@ class Connection:
 		End Node: {self.endNode}<br>
 		"""
 
-	def __init__(self, way_id, type, voltages, frequency, circuits, cables, operator, geometry, length=None, startNode=None, endNode=None, filter_f=None):
+	def __init__(self, way_id, type, voltages, capacities, ampacities, dlr, frequency, circuits, cables, operator, geometry, length=None, startNode=None, endNode=None, filter_f=None):
 
 		self.type = type or ConnType.UNDEF
 
@@ -377,6 +416,35 @@ class Connection:
 		if len(self.circuits) < 1:
 			raise NoValidCircuitError("No valid circuits found in this conn")
 
+		for capacity_voltage, capacity in capacities.items():
+
+			voltage_systems = 0
+			for c in self.circuits:
+				if c.voltage == capacity_voltage:
+					voltage_systems += c.systems
+
+			if voltage_systems == 0:
+				continue
+
+			capacity_per_system = capacity / voltage_systems # is in MVA
+
+			ampacity = ampacities.get(capacity_voltage) or (capacity * 1000000 / capacity_voltage) # in A
+
+			ampacity_per_system = ampacity / voltage_systems # in A
+
+			dlr_per_system = tuple([val/voltage_systems for val in dlr.get(capacity_voltage, (0, 0))])
+
+			for c in self.circuits:
+
+				if c.voltage == capacity_voltage:
+
+					c.capacity = capacity_per_system * c.systems
+					c.ampacity = ampacity_per_system * c.systems
+					c.dlr = (dlr_per_system[0] * c.systems, dlr_per_system[1] * c.systems)
+
+					c.wire_type = WireType(self.type, c.voltage, ampacity_per_system)
+
+
 		self.operator = operator
 
 		self.length = length if length else util.Geo.compute_length(geometry)
@@ -476,8 +544,11 @@ class Connection:
 				str(c.wire_type.x_ohm_per_km),
 				str(c.wire_type.c_nf_per_km),
 				str(c.wire_type.max_i_ka),
+				str(c.capacity if c.capacity else ""),
+				str(c.dlr[0] if c.dlr and c.dlr[0] else ""),
+				str(c.dlr[1] if c.dlr and c.dlr[1] else ""),
 				f"way/{self.id}",
-				str(c.cables_per_phase), # parallel_cables
+				str(c.systems), # parallel_cables
 				"overhead" if self.type == ConnType.LINE else "underground", # line_type
 				"AC" if c.frequency > 0 else "DC", # ac_dc_type
 				"", # switch_group
@@ -495,7 +566,7 @@ class Connection:
 				str(c.wire_type.x_ohm_per_km),
 				str(c.wire_type.c_nf_per_km),
 				str(c.wire_type.max_i_ka),
-				str(c.cables_per_phase),
+				str(c.systems),
 				str(c.voltage // 1000),
 				str(c.frequency)
 			]
@@ -513,6 +584,9 @@ class Connection:
 			"x_ohm_per_km",
 			"c_nf_per_km",
 			"max_i_ka",
+			"capacity_mva",
+			"dlr_min_a",
+			"dlr_max_a",
 			"name",
 			"parallel_cables_per_phase",
 			"line_type",
@@ -585,10 +659,21 @@ class TransmissionLine(Connection):
 		]
 		"""
 
+		voltages = [voltage for key, voltage in properties.items() if key.startswith('Voltage_') and voltage]
+		capacities = {int(key[15:])*1000: capacity for key, capacity in properties.items() if key.startswith('Rated_Capacity_') and capacity}
+
+		ampacities = {int(key[21:24])*1000: ampacity for key, ampacity in properties.items() if key.startswith('Maximum_Current_Imax_') and ampacity}
+		dlr_min = {int(key[8:11])*1000: ampacity for key, ampacity in properties.items() if key.startswith('DLR_Min_') and ampacity}
+		dlr_max = {int(key[8:11])*1000: ampacity for key, ampacity in properties.items() if key.startswith('DLR_Max_') and ampacity and not key.startswith("DLR_Max_C")}
+		dlr = {voltage: (dlr_min[voltage], dlr_max[voltage]) for voltage in dlr_min.keys()}
+
 		super().__init__(
 			way_id = properties['Id'],
 			type = ConnType.LINE,
-			voltages = [voltage for key, voltage in properties.items() if key.startswith('Voltage_') and voltage],
+			voltages = voltages,
+			capacities = capacities,
+			ampacities = ampacities,
+			dlr = dlr,
 			frequency = properties['Frequency'],
 			circuits = properties['Circuits'],
 			cables = properties['Cables'],
@@ -686,10 +771,21 @@ class TransmissionCable(Connection):
 		]
 		"""
 
+		voltages = [voltage for key, voltage in properties.items() if key.startswith('Voltage_') and voltage]
+		capacities = {int(key[15:])*1000: capacity for key, capacity in properties.items() if key.startswith('Rated_Capacity_') and capacity}
+
+		ampacities = {int(key[21:24])*1000: ampacity for key, ampacity in properties.items() if key.startswith('Maximum_Current_Imax_') and ampacity}
+		dlr_min = {int(key[8:11])*1000: ampacity for key, ampacity in properties.items() if key.startswith('DLR_Min_') and ampacity}
+		dlr_max = {int(key[8:11])*1000: ampacity for key, ampacity in properties.items() if key.startswith('DLR_Max_') and ampacity and not key.startswith("DLR_Max_C")}
+		dlr = {voltage: (dlr_min[voltage], dlr_max[voltage]) for voltage in dlr_min.keys()}
+
 		super().__init__(
 			way_id = properties['Id'],
 			type = ConnType.CABLE,
-			voltages = [voltage for key, voltage in properties.items() if key.startswith('Voltage_') and voltage],
+			voltages = voltages,
+			capacities = capacities,
+			ampacities = ampacities,
+			dlr = dlr,
 			frequency = properties['Frequency'],
 			circuits = properties['Circuits'],
 			cables = properties['Cables'],

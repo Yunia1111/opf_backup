@@ -1,0 +1,177 @@
+{
+
+ "lines": {
+
+  "220000": {
+
+   "OHL-220kV-300-AL1/39-ST1A": {
+     "r_ohm_per_km": 0.094,
+     "x_ohm_per_km": 0.38,
+     "c_nf_per_km": 9.5,
+     "max_i_ka_air": 0.75
+   },
+
+   "OHL-220kV-490-AL1/64-ST1A": {
+     "r_ohm_per_km": 0.059,
+     "x_ohm_per_km": 0.37,
+     "c_nf_per_km": 9.2,
+     "max_i_ka_air": 0.96
+   },
+
+   "OHL-220kV-670-AL1/86-ST1A": {
+     "r_ohm_per_km": 0.045,
+     "x_ohm_per_km": 0.36,
+     "c_nf_per_km": 9.0,
+     "max_i_ka_air": 1.15
+   },
+
+   "OHL-220kV-740-AL1/95-ST1A": {
+     "r_ohm_per_km": 0.041,
+     "x_ohm_per_km": 0.35,
+     "c_nf_per_km": 8.8,
+     "max_i_ka_air": 1.25
+   },
+
+   "OHL-220kV-900-AL1/120-ST1A": {
+     "r_ohm_per_km": 0.033,
+     "x_ohm_per_km": 0.34,
+     "c_nf_per_km": 8.5,
+     "max_i_ka_air": 1.45
+   }
+
+  },
+
+  "380000": {
+
+   "OHL-380kV-490-AL1/64-ST1A": {
+     "r_ohm_per_km": 0.059,
+     "x_ohm_per_km": 0.253,
+     "c_nf_per_km": 11,
+     "max_i_ka_air": 0.96
+   },
+
+   "OHL-380kV-679-AL1/86-ST1A": {
+     "r_ohm_per_km": 0.043,
+     "x_ohm_per_km": 0.25,
+     "c_nf_per_km": 11.5,
+     "max_i_ka_air": 1.20
+   },
+
+   "OHL-380kV-714-AL1/95-ST1A": {
+     "r_ohm_per_km": 0.041,
+     "x_ohm_per_km": 0.245,
+     "c_nf_per_km": 11.7,
+     "max_i_ka_air": 1.25
+   },
+
+   "OHL-380kV-900-AL1/120-ST1A": {
+     "r_ohm_per_km": 0.033,
+     "x_ohm_per_km": 0.24,
+     "c_nf_per_km": 12.0,
+     "max_i_ka_air": 1.45
+   },
+
+   "OHL-380kV-1200-AL1/150-ST1A": {
+     "r_ohm_per_km": 0.025,
+     "x_ohm_per_km": 0.23,
+     "c_nf_per_km": 12.4,
+     "max_i_ka_air": 1.75
+   }
+
+  }
+
+ },
+
+ "cables": {
+
+  "220000": {
+
+   "Kabel-220kV-630mm2-XLPE": {
+     "r_ohm_per_km": 0.061,
+     "x_ohm_per_km": 0.085,
+     "c_nf_per_km": 220,
+     "max_i_ka_ground": 0.65,
+     "max_i_ka_air": 0.90
+   },
+
+   "Kabel-220kV-800mm2-XLPE": {
+     "r_ohm_per_km": 0.047,
+     "x_ohm_per_km": 0.083,
+     "c_nf_per_km": 230,
+     "max_i_ka_ground": 0.75,
+     "max_i_ka_air": 1.05
+   },
+
+   "Kabel-220kV-1000mm2-XLPE": {
+     "r_ohm_per_km": 0.036,
+     "x_ohm_per_km": 0.080,
+     "c_nf_per_km": 240,
+     "max_i_ka_ground": 0.85,
+     "max_i_ka_air": 1.15
+   },
+
+   "Kabel-220kV-1600mm2-XLPE": {
+     "r_ohm_per_km": 0.023,
+     "x_ohm_per_km": 0.078,
+     "c_nf_per_km": 255,
+     "max_i_ka_ground": 1.10,
+     "max_i_ka_air": 1.45
+   },
+
+   "Kabel-220kV-2500mm2-XLPE": {
+     "r_ohm_per_km": 0.015,
+     "x_ohm_per_km": 0.076,
+     "c_nf_per_km": 270,
+     "max_i_ka_ground": 1.40,
+     "max_i_ka_air": 1.80
+   }
+
+  },
+
+  "380000": {
+
+   "Kabel-380kV-630mm2-XLPE": {
+     "r_ohm_per_km": 0.061,
+     "x_ohm_per_km": 0.110,
+     "c_nf_per_km": 300,
+     "max_i_ka_ground": 0.60,
+     "max_i_ka_air": 0.85
+   },
+
+   "Kabel-380kV-1000mm2-XLPE": {
+     "r_ohm_per_km": 0.036,
+     "x_ohm_per_km": 0.105,
+     "c_nf_per_km": 330,
+     "max_i_ka_ground": 0.80,
+     "max_i_ka_air": 1.10
+   },
+
+   "Kabel-380kV-1600mm2-XLPE": {
+     "r_ohm_per_km": 0.023,
+     "x_ohm_per_km": 0.100,
+     "c_nf_per_km": 350,
+     "max_i_ka_ground": 1.05,
+     "max_i_ka_air": 1.45
+   },
+
+   "Kabel-380kV-2000mm2-XLPE": {
+     "r_ohm_per_km": 0.019,
+     "x_ohm_per_km": 0.098,
+     "c_nf_per_km": 360,
+     "max_i_ka_ground": 1.30,
+     "max_i_ka_air": 1.70
+   },
+
+   "Kabel-380kV-2500mm2-XLPE": {
+     "r_ohm_per_km": 0.015,
+     "x_ohm_per_km": 0.095,
+     "c_nf_per_km": 380,
+     "max_i_ka_ground": 1.55,
+     "max_i_ka_air": 1.95
+   }
+
+  }
+
+ }
+
+}
