@@ -111,7 +111,7 @@ def main(only_prep_gens=False):
 					added_cap_sum += mva_inc
 					added_cap_sum_rel += mva_inc/mva_base
 				else:
-					raise Exception("Not '\d MVA'")
+					raise Exception("Not '\\d MVA'")
 
 			comm_year = nep_item["properties"]["Commissioning Date"]
 
