@@ -4,6 +4,7 @@
 from pyproj import Geod
 
 import math
+import collections.abc
 
 class Geo():
 
@@ -31,7 +32,7 @@ class Coords:
 			if isinstance(fst, Coords):
 				lat = fst.lat
 				lon = fst.lon
-			elif isinstance(fst, (tuple,list)):
+			elif isinstance(fst, (tuple,list,collections.abc.Iterable)):
 				lat, lon = fst
 			elif isinstance(fst, complex):
 				lat = fst.real
