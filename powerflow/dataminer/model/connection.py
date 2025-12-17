@@ -75,6 +75,7 @@ class WireType:
 		if ampacity_per_system and voltage > 200000:
 
 			# TODO: Build a config system+module for this stuff
+			# TODO: Extrapolate dataset to 4kA+
 			with open("data/source_data/wires.json") as f:
 				wire_types = json.load(f)
 
@@ -139,6 +140,14 @@ class Circuit:
 
 	def __repr__(self):
 		return f"{self.voltage//1000}kV {self.phases} phase, {self.cables} cables, {self.systems} systems, {self.capacity}MVA, {self.ampacity}A, DLR: {self.dlr}A, Wire:{self.wire_type.name}"
+
+	def fallback_capacity(self):
+		if self.voltage > 300000:
+			return 1600
+		elif self.voltage > 200000:
+			return 800
+		else:
+			return 250
 
 	def max_v(self):
 		return self.voltage

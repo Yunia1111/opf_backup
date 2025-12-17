@@ -5,6 +5,7 @@ from .map import create_map
 from .db import DB
 
 MAX_DISTANCE_SAME_SUBSTATION_M = 50
+MAX_DISTANCE_SAME_CONN_POINT_M = 20
 MAX_DISTANCE_BRANCH_M = 10
 MAX_DISTANCE_SUBSTATION_M = 500
 
@@ -65,59 +66,131 @@ def main(only_prep_gens=False):
 		filter_f=voltageFilter
 	)
 
+	print("\n\n   >>>   Base Import Complete   <<<   \n\n")
+
 	### NEP
 
-	include_nep = False
+	include_nep = True
 	if include_nep:
 
-		# TODO: nep-ehv and nep-hv
+		# nep-ehv and nep-hv
+		# TODO: nep-hv
 		# Netzentwicklungsplan
 		# New lines and substations
 		# Convert into realistic line
-		# Use average for non-given values
 
 		Substation.build_search_tree()
+		Connection.build_search_tree()
 
-		with open(datadir + "nep-hv.json") as f:
+		with open(datadir + "nep-ehv.json") as f:
 			raw_nep_items = json.load(f)
 
-		added_cap_sum = 0
-		added_cap_sum_rel = 0
+		added_cap_num = defaultdict(int)
+		added_cap_sum = defaultdict(int)
+		added_cap_sum_rel = defaultdict(int)
 
-		# TODO: Do two passes:
-		# - one for calculating the average relative capacity increase
-		# - and then one to actually add the data (new power, voltages, etc. with comm_year flag)
-		for nep_item in raw_nep_items:
+		sub_not_found = 0
+
+		conn_counter = 0
+		found_conn_counter = 0
+
+		# === PASS 1 ===
+		# Calculated the average relative capacity increase
+		# To be used for the many entries that don't have an "Added Capacity" field
+		print("Scanning NEP entries...")
+		for ni, nep_item in enumerate(raw_nep_items):
+
+			print(f"NEP {ni:>5}/{len(raw_nep_items)}", end='\r')
 
 			# try to find existing item
-			nep_element = nep_item["properties"]["Element"]
-			if "Substation" in nep_element:
+			nep_element = nep_item["properties"]["Element"].lower()
+			nep_elements = nep_element.split(', ')
+			if "substation" in nep_elements:
+
 				coords = Coords(reversed(nep_item["geometry"]["coordinates"]))
-				closest_sub = Node.get(Substation.search_closest(coords))
+				closest_sub = Node.get(Substation.search_closest(coords)[0])
 				distance = closest_sub.coords.distance_to(coords)
 				if (distance < MAX_DISTANCE_SAME_SUBSTATION_M):
 					mva_base = closest_sub.power / 1e6
+				else:
+					sub_not_found += 1
 
-			elif "Line" in nep_element or "Cable" in nep_element:
-				# 1. Find existing from just start+end or all geom points?
-				# Latter is probs difficult, needs some similarity heuristic
-				pass
+			elif "line" in nep_elements or "cable" in nep_elements:
+
+				conn_counter += 1
+
+				found_adj = {}
+				found_conns = set()
+
+				for corner in nep_item["geometry"]["coordinates"]:
+					coords = Coords(reversed(corner))
+					neighbors = Connection.search(coords, MAX_DISTANCE_SAME_CONN_POINT_M)
+					if neighbors:
+
+						for cid, endtype in neighbors.items():
+							if (cid in found_adj) and (found_adj[cid] != endtype):
+								found_conns.add(cid)
+
+						found_adj |= neighbors
+
+				if len(found_conns) >= 1:
+					found_conn_counter += 1
+
+					# TODO: Save found_conns per nep_item
+					# so we don't have to recompute them in pass 2
+
+					mva_base = 0
+					num_systems = 0
+					for cid in list(found_conns):
+						conn = Connection.get(cid)
+						for c in conn.circuits:
+							mva_base += c.capacity or c.fallback_capacity()
+							num_systems += c.systems
+					mva_base /= len(found_conns)
+					num_systems = round(num_systems/len(found_conns))
+
+					mva_new = num_systems * 380 * 2 # everything in EHV is being upgraded to 380kV 2kA basically. Stefan said this is fine.
+					mva_inc = mva_new - mva_base
+
+					for el in nep_elements:
+						added_cap_num[el] += 1
+						added_cap_sum[el] += mva_inc
+						added_cap_sum_rel[el] += mva_inc/mva_base
 
 			# calc added cap
 			added_cap = nep_item["properties"].get("Added Capacity")
 			if added_cap:
-				if added_cap[:-4] == " MVA":
+				if added_cap[-4:] == " MVA":
 					mva_inc = int(added_cap[:-4])
-					added_cap_sum += mva_inc
-					added_cap_sum_rel += mva_inc/mva_base
+					for el in nep_elements:
+						added_cap_num[el] += 1
+						added_cap_sum[el] += mva_inc
+						added_cap_sum_rel[el] += mva_inc/mva_base
 				else:
+					print('')
+					print('Offending NEP entry:')
+					print(nep_item)
 					raise Exception("Not '\\d MVA'")
 
 			comm_year = nep_item["properties"]["Commissioning Date"]
 
-			# TODO: Also Process: Voltages, Frequency?
+			# QUESTION: Also process new voltages, frequencies?
 
+		average_added_cap_rel = {el: cap_sum_rel/added_cap_num[el] for el, cap_sum_rel in added_cap_sum_rel.items()}
 
+		print('')
+		print("NEP first pass done:")
+		print(average_added_cap_rel)
+		print(sub_not_found, "Substations could not be correlated.")
+		print(f"{found_conn_counter}/{conn_counter} connections could be correlated.")
+
+		# === PASS 2 ===
+		# Add the data to the model (new power, voltages, etc. with comm_year flag)
+		print("Adding NEP entries...")
+
+		# TODO
+
+		print("NEP second pass done.")
 
 
 	print("Completed import.")

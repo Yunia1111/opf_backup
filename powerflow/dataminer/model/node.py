@@ -177,6 +177,8 @@ class Substation(Node):
 
 	def __init__(self, properties, filter_f=None):
 
+		# TODO: Use 'SubstationInsightsBlindleister' object data for power/TFs
+
 		# Done before super() so the filter can see it
 		self.db_voltages = [1000 * int(key[2:]) for key, exists in properties.items() if key.startswith('KV') and exists == True]
 		self.db_voltages.sort()
