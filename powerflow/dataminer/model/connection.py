@@ -72,14 +72,14 @@ class WireType:
 
 	def __init__(self, conn_type, voltage, ampacity_per_system=None):
 
-		if ampacity_per_system:
+		if ampacity_per_system and voltage > 200000:
 
 			# TODO: Build a config system+module for this stuff
 			with open("data/source_data/wires.json") as f:
 				wire_types = json.load(f)
 
 			wire_types = wire_types["lines" if conn_type == ConnType.LINE else "cables"]
-			wire_types = wire_types[str(voltage)] # TODO: Handle nonexistant, e.g. 110
+			wire_types = wire_types[str(voltage)]
 
 			ampacity_key = "max_i_ka_air" if conn_type == ConnType.LINE else "max_i_ka_ground"
 
