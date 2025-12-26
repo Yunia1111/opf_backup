@@ -31,7 +31,7 @@ TRAFO_I0_PERCENT = 0.1
 
 # ========== File Paths ==========
 DATA_DIR = "data/intermediate_model"
-OUTPUT_DIR = "analysis/results/"
+OUTPUT_DIR = "powerflow/analysis/results"
 
 # ========== Power Flow (PF) Settings ==========
 PF_MAX_ITERATION = 100
@@ -119,8 +119,7 @@ GENERATOR_TYPE_COLORS = {
     'storage': '#F1C40F',              # Yellow
     'brown coal': '#795548',           # Brown
     'coal': '#34495E',                 # Dark Grey
-    'natural_gas': '#E74C3C',          # Red
-    'natural gas': '#E74C3C',          # Red (Alias)
+    'natural gas': '#E74C3C',          # Red 
     'other gases': '#C0392B',          # Dark Red
     'petroleum products': '#2C3E50',   # Black-Blue
     'hydrogen': '#3498DB',             # Light Blue

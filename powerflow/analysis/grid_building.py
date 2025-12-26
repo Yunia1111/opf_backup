@@ -40,9 +40,6 @@ class GridModeler:
             except Exception as e:
                 print(f"  ⚠ Cache load failed ({e}), falling back to rebuild.")
 
-        # ====================================================
-        # IF NO CACHE OR FORCE REBUILD
-        # ====================================================
         print("1. Loading raw data (Rebuilding network)...")
         self._load_data()
 
@@ -55,7 +52,7 @@ class GridModeler:
         print("4. Building pandapower base net (nameplate capacity)...")
         self.base_net = self._build_network_from_components()
 
-        # === Connectivity Check & Disconnected Component Handling ===
+        #  Connectivity Check & Disconnected Component Handling 
         print("  > Checking network connectivity...")
         mg = top.create_nxgraph(self.base_net)
         islands = list(nx.connected_components(mg))
@@ -105,7 +102,7 @@ class GridModeler:
 
         return self.base_net, self.ext_grid_list
 
-    # --- Data Loading ---
+    # data loading, remove pst related parts
     def _load_data(self):
         def _load_csv(filename):
             path = os.path.join(config.DATA_DIR, filename)
@@ -128,18 +125,11 @@ class GridModeler:
             print("  > No HVDC projects file found (skipping).")
 
         try:
-            self.pst_projects = _load_csv("pst_projects.csv")
-            print(f"  > Found PST projects file: {len(self.pst_projects)} lines.")
-        except FileNotFoundError:
-            self.pst_projects = None
-            print("  > No PST projects file found (skipping).")
-
-        try:
             self.external_grids = _load_csv("external_grids.csv")
         except FileNotFoundError:
             self.external_grids = None
 
-    # --- Data Preprocessing ---
+    #  Data Preprocessing 
     def _preprocess_data(self):
         pf = config.POWER_FACTOR
         tan_phi = np.tan(np.arccos(pf))
@@ -275,7 +265,6 @@ class GridModeler:
                     i0_percent=trafo['i0_percent'], name=trafo['transformer_id']
                 )
 
-        self._add_pst_transformers(net)
         self._add_hvdc_lines(net)
         self._add_generators_and_loads(net, ext_grid_buses)
 
@@ -352,7 +341,7 @@ class GridModeler:
 
         return pv_buses
 
-    # --- PST and HVDC Helpers ---
+    # --- HVDC Helpers ---
     def _add_hvdc_lines(self, net):
         if self.hvdc_projects is None or len(self.hvdc_projects) == 0:
             return
@@ -379,49 +368,3 @@ class GridModeler:
                 max_q_to_mvar=row['capacity_mw']*0.5, name=row['name'], in_service=True, controllable=True)
             count += 1
         print(f"  > Added {count} HVDC corridors.")
-
-    def _add_pst_transformers(self, net):
-        if self.pst_projects is None or len(self.pst_projects) == 0: return
-
-        print("  > Integrating Phase Shift Transformers (PST)...")
-        hv_buses = net.bus[net.bus.vn_kv >= 220.0].copy()
-        if hv_buses.empty: return
-
-        def get_nearest_indices(lat, lon, n=2):
-            dists = (hv_buses['geo'].apply(lambda x: x[0]) - lat)**2 + \
-                    (hv_buses['geo'].apply(lambda x: x[1]) - lon)**2
-            return dists.nsmallest(n).index.tolist()
-
-        count = 0
-        for _, row in self.pst_projects.iterrows():
-            if str(row.get('in_service', 'false')).lower() != 'true': continue
-
-            from_candidates = get_nearest_indices(row['from_lat'], row['from_lon'], n=2)
-            to_candidates = get_nearest_indices(row['to_lat'], row['to_lon'], n=2)
-            from_bus, to_bus = from_candidates[0], to_candidates[0]
-
-            if from_bus == to_bus:
-                print(f"    ⚠ PST '{row['name']}' endpoints snapped to same bus ({from_bus}). Attempting fix...")
-                if len(to_candidates) > 1:
-                    to_bus = to_candidates[1]
-                    print(f"      -> Fixed: Re-routed 'to_bus' to neighbor {to_bus}.")
-                else:
-                    print(f"      -> Failed: No alternative bus found. Skipping PST.")
-                    continue
-            if from_bus == to_bus: continue
-
-            vn_hv = net.bus.at[from_bus, 'vn_kv']
-            vn_lv = net.bus.at[to_bus, 'vn_kv']
-            range_deg = float(row.get('angle_range_deg', 30))
-            step_size = 2.0
-            steps = int(range_deg / step_size)
-
-            pp.create_transformer_from_parameters(net, hv_bus=from_bus, lv_bus=to_bus,
-                sn_mva=float(row['sn_mva']), vn_hv_kv=vn_hv, vn_lv_kv=vn_lv,
-                vkr_percent=0.1, vk_percent=12.0, pfe_kw=10.0, i0_percent=0.05,
-                shift_degree=0.0, tap_phase_shifter=True, tap_side='hv', tap_neutral=0,
-                tap_min=-steps, tap_max=steps, tap_step_degree=step_size, tap_step_percent=0.0,
-                name=row['name'], in_service=True)
-            net.trafo.at[net.trafo.index[-1], 'controllable'] = True
-            count += 1
-        print(f"  > Added {count} Phase Shift Transformers.")

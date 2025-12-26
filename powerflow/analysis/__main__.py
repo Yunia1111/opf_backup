@@ -11,7 +11,7 @@ from . import grid_building
 from . import opf
 from . import report_export
 from . import visualization
-from . import Injections
+from . import injections
 
 # Try importing scenarios, handle missing file gracefully
 try:
@@ -118,7 +118,7 @@ def main():
             print_comparison_table(df_results)
 
             os.makedirs(config.OUTPUT_DIR, exist_ok=True)
-            comparison_file = f"{config.OUTPUT_DIR}scenario_comparison.csv"
+            comparison_file = os.path.join(config.OUTPUT_DIR, "scenario_comparison.csv")
             df_results.to_csv(comparison_file, index=False, float_format='%.2f')
             print(f"\n✓ Comparison table saved to: {comparison_file}")
         else:
@@ -133,7 +133,7 @@ def main():
             print("="*80)
 
             # Updated Class Instantiation
-            analyzer = Injections.InjectionAnalyzer(base_net, external_grids)
+            analyzer = injections.InjectionAnalyzer(base_net, external_grids)
 
             # --- USER INPUT: Coordinates (Example: Near Munich) ---
             target_lat = 48.13

@@ -150,44 +150,114 @@ class ReportGenerator:
             else:
                 f.write("No HVDC lines configured.\n")
 
-            # PST SECTION
-            f.write("\n\nPHASE SHIFT TRANSFORMERS (PST)\n")
-            f.write("-" * 68 + "\n")
-            f.write(f"{'Name':<25} | {'Angle (Deg)':>12} | {'Loading %':>10}\n")
-            f.write("-" * 68 + "\n")
-            
-            # [FIXED] Safely check for tap_phase_shifter column
-            if 'tap_phase_shifter' in self.net.trafo.columns:
-                pst_trafos = self.net.trafo[self.net.trafo['tap_phase_shifter'] == True]
-            else:
-                pst_trafos = pd.DataFrame()
-
-            if not pst_trafos.empty:
-                for idx, t in pst_trafos.iterrows():
-                    # Calculate actual angle: tap_pos * tap_step_degree
-                    angle = self.net.res_trafo.at[idx, 'tap_pos'] * t['tap_step_degree'] if idx in self.net.res_trafo.index else 0
-                    loading = self.net.res_trafo.at[idx, 'loading_percent'] if idx in self.net.res_trafo.index else 0
-                    f.write(f"{t['name']:<25} | {angle:>12.1f} | {loading:>10.1f}\n")
-            else:
-                f.write("No PSTs active.\n")
-
     def _export_visualization_data(self):
-        d = {'buses': [], 'lines': [], 'generators': [], 'loads': [], 'external_grids': [], 'dclines': [], 'psts': [], 'disconnected': []}
+        # add more complete power flow results data for visualization
+        d = {
+            'buses': [], 'lines': [], 'generators': [], 'loads': [], 
+            'external_grids': [], 'dclines': [], 'psts': [], 
+            'disconnected': [], 'trafos': [] 
+        }
+
         get_geo = lambda i: self.net.bus.at[i, 'geo'] if self.net.bus.at[i, 'geo'] else None
-        
+
+        # add buses data (with va_degree and vm_pu)
         for i, b in self.net.bus.iterrows():
             geo = get_geo(i)
-            if geo: d['buses'].append({'id': i, 'name': b['name'], 'lat': geo[0], 'lon': geo[1], 'vn_kv': b['vn_kv'], 'vm_pu': float(self.net.res_bus.at[i, 'vm_pu'])})
-            
+            if geo: 
+                vm = float(self.net.res_bus.at[i, 'vm_pu']) if len(self.net.res_bus) > 0 else 1.0
+                va = float(self.net.res_bus.at[i, 'va_degree']) if len(self.net.res_bus) > 0 else 0.0
+                
+                d['buses'].append({
+                    'id': i, 
+                    'name': b['name'], 
+                    'lat': geo[0], 'lon': geo[1], 
+                    'vn_kv': b['vn_kv'], 
+                    'vm_pu': vm,
+                    'va_degree': va  
+                })   
+        
+        # add line data (with line loading percent, p_from_mw, q_from_mvar, p_to_mw, q_to_mvar)
         for i, l in self.net.line.iterrows():
             fgeo, tgeo = get_geo(l['from_bus']), get_geo(l['to_bus'])
-            if fgeo: 
-                l_data = {'id': i, 'name': l['name'], 'from_bus_id': l['from_bus'], 'to_bus_id': l['to_bus'], 'from_lat': fgeo[0], 'from_lon': fgeo[1], 'to_lat': tgeo[0], 'to_lon': tgeo[1], 'loading_percent': float(self.net.res_line.at[i, 'loading_percent']), 'p_from_mw': float(self.net.res_line.at[i, 'p_from_mw'])}
+            if fgeo and tgeo: 
+                loading = float(self.net.res_line.at[i, 'loading_percent']) if len(self.net.res_line) > 0 else 0.0
+                p_from = float(self.net.res_line.at[i, 'p_from_mw']) if len(self.net.res_line) > 0 else 0.0
+                q_from = float(self.net.res_line.at[i, 'q_from_mvar']) if len(self.net.res_line) > 0 else 0.0
+                p_to = float(self.net.res_line.at[i, 'p_to_mw']) if len(self.net.res_line) > 0 else 0.0
+                q_to = float(self.net.res_line.at[i, 'q_to_mvar']) if len(self.net.res_line) > 0 else 0.0
+
+                l_data = {
+                    'id': i, 'name': l['name'], 
+                    'from_bus_id': l['from_bus'], 'to_bus_id': l['to_bus'], 
+                    'from_lat': fgeo[0], 'from_lon': fgeo[1], 
+                    'to_lat': tgeo[0], 'to_lon': tgeo[1], 
+                    'loading_percent': loading, 
+                    'p_from_mw': p_from, 'q_from_mvar': q_from, 
+                    'p_to_mw': p_to, 'q_to_mvar': q_to        
+                }
+
                 if 'geo_coords' in l and pd.notna(l['geo_coords']):
                     try: l_data['geo_coords'] = __import__('ast').literal_eval(l['geo_coords'])
                     except: pass
                 d['lines'].append(l_data)
+
+        # add trafo data (with trafo loading percent, p_hv_mw, q_hv_mvar)
+        for i, t in self.net.trafo.iterrows():
+            hv_geo, lv_geo = get_geo(t['hv_bus']), get_geo(t['lv_bus'])
+            if hv_geo and lv_geo:
+                loading = float(self.net.res_trafo.at[i, 'loading_percent']) if len(self.net.res_trafo) > 0 else 0.0
+                p_hv = float(self.net.res_trafo.at[i, 'p_hv_mw']) if len(self.net.res_trafo) > 0 else 0.0
+                q_hv = float(self.net.res_trafo.at[i, 'q_hv_mvar']) if len(self.net.res_trafo) > 0 else 0.0
+                
+                d['trafos'].append({
+                    'id': i, 'name': t['name'],
+                    'hv_lat': hv_geo[0], 'hv_lon': hv_geo[1],
+                    'lv_lat': lv_geo[0], 'lv_lon': lv_geo[1],
+                    'loading_percent': loading,
+                    'p_mw': p_hv, 'q_mvar': q_hv
+                })
         
+        # add generators and storage data (with p_mw and q_mvar)
+        for et in ['gen', 'sgen', 'storage']:
+            if len(self.net[et]) > 0:
+                for i, g in self.net[et].iterrows():
+                    geo = get_geo(g['bus'])
+                    res_key = f'res_{et}'
+                    p_val = self.net[res_key].at[i, 'p_mw'] if len(self.net[res_key]) > 0 else 0.0
+                    q_val = self.net[res_key].at[i, 'q_mvar'] if len(self.net[res_key]) > 0 else 0.0
+                    
+                    if geo: 
+                        d['generators'].append({
+                            'id': f"{et}_{i}", 'name': g['name'], 
+                            'lat': geo[0], 'lon': geo[1], 
+                            'type': g['type'], 
+                            'p_mw': float(p_val), 'q_mvar': float(q_val), 
+                            'sn_mva': float(g.get('sn_mva', 0))
+                        })
+
+        # add loads data (with p_mw and q_mvar)
+        for i, l in self.net.load.iterrows():
+            geo = get_geo(l['bus'])
+            if geo:
+                d['loads'].append({
+                    'id': i, 'name': l['name'],
+                    'lat': geo[0], 'lon': geo[1],
+                    'p_mw': float(l['p_mw']),
+                    'q_mvar': float(l['q_mvar'])
+                })
+
+        # add external grids data (with p_mw and q_mvar)
+        for i, eg in self.net.ext_grid.iterrows():
+            geo = get_geo(eg['bus'])
+            p_val = self.net.res_ext_grid.at[i, 'p_mw'] if len(self.net.res_ext_grid) > 0 else 0
+            q_val = self.net.res_ext_grid.at[i, 'q_mvar'] if len(self.net.res_ext_grid) > 0 else 0
+            if geo: 
+                d['external_grids'].append({
+                    'id': i, 'name': eg['name'], 
+                    'lat': geo[0], 'lon': geo[1], 
+                    'p_mw': float(p_val), 'q_mvar': float(q_val)
+                })
+
         # HVDC
         if len(self.net.dcline) > 0:
             for i, dc in self.net.dcline.iterrows():
@@ -196,35 +266,7 @@ class ReportGenerator:
                     p_val = self.net.res_dcline.at[i, 'p_from_mw'] if len(self.net.res_dcline) > 0 else 0
                     d['dclines'].append({'id': i, 'name': dc['name'], 'from_lat': fgeo[0], 'from_lon': fgeo[1], 'to_lat': tgeo[0], 'to_lon': tgeo[1], 'p_mw': float(p_val), 'capacity': float(dc['max_p_mw'])})
 
-        # PSTs
-        # [FIXED] Safely check for tap_phase_shifter column
-        if 'tap_phase_shifter' in self.net.trafo.columns:
-            pst_trafos = self.net.trafo[self.net.trafo['tap_phase_shifter'] == True]
-        else:
-            pst_trafos = pd.DataFrame()
-
-        for idx, t in pst_trafos.iterrows():
-            geo = self.net.bus.at[t['hv_bus'], 'geo'] # Plot at HV side
-            if geo:
-                tap_pos = float(self.net.res_trafo.at[idx, 'tap_pos']) if idx in self.net.res_trafo.index else 0
-                angle = tap_pos * float(t['tap_step_degree'])
-                load = float(self.net.res_trafo.at[idx, 'loading_percent']) if idx in self.net.res_trafo.index else 0
-                d['psts'].append({'id': idx, 'name': t['name'], 'lat': geo[0], 'lon': geo[1], 'tap_pos': angle, 'loading': load})
-
-        for et in ['gen', 'sgen', 'storage']:
-            if len(self.net[et]) > 0:
-                for i, g in self.net[et].iterrows():
-                    geo = get_geo(g['bus'])
-                    res_key = f'res_{et}'
-                    p_val = self.net[res_key].at[i, 'p_mw'] if len(self.net[res_key]) > 0 else 0
-                    if geo: d['generators'].append({'id': f"{et}_{i}", 'name': g['name'], 'lat': geo[0], 'lon': geo[1], 'type': g['type'], 'p_mw': float(p_val), 'sn_mva': float(g.get('sn_mva', 0))})
-                    
-        for i, eg in self.net.ext_grid.iterrows():
-            geo = get_geo(eg['bus'])
-            p_val = self.net.res_ext_grid.at[i, 'p_mw'] if len(self.net.res_ext_grid) > 0 else 0
-            if geo: d['external_grids'].append({'id': i, 'name': eg['name'], 'lat': geo[0], 'lon': geo[1], 'p_mw': float(p_val)})
-            
-        # [NEW] Add Disconnected Buses
+        # add Disconnected Buses
         disc_cache_path = os.path.join(config.OUTPUT_DIR, "disconnected_buses.json")
         if os.path.exists(disc_cache_path):
             try:
