@@ -37,13 +37,14 @@ class Visualizer:
         layer_grid_380 = folium.FeatureGroup(name='380kV Grid', show=False)
         layer_grid_220 = folium.FeatureGroup(name='220kV Grid', show=False)
         layer_hvdc = folium.FeatureGroup(name='HVDC Corridors', show=True) 
-        layer_pst = folium.FeatureGroup(name='Phase Shifters (PST)', show=True)
         layer_loading = folium.FeatureGroup(name='Line Loading', show=True)
         layer_gen = folium.FeatureGroup(name='Generation', show=True)
         layer_border = folium.FeatureGroup(name='Border Flows', show=True)
         layer_inj = folium.FeatureGroup(name='Injection Analysis', show=True)
-        layer_disc = folium.FeatureGroup(name='Disconnected Components', show=True) # [NEW]
-        
+        layer_disc = folium.FeatureGroup(name='Disconnected Components', show=True) 
+        layer_trafos   = folium.FeatureGroup(name='Transformers', show=True)
+        layer_loads    = folium.FeatureGroup(name='Loads', show=True)
+
         # Lines (AC)
         line_v_map = self._map_line_voltages(data['lines'], data['buses'])
         for line in data['lines']:
@@ -60,19 +61,12 @@ class Visualizer:
                 popup = f"<b>HVDC: {dc['name']}</b><br>Flow: {dc['p_mw']:.1f} MW<br>Util: {util:.1f}%"
                 folium.PolyLine(coords, color='#FF6B35', weight=4, dash_array='10, 10', opacity=1, popup=popup, tooltip=f"HVDC {dc['p_mw']:.0f} MW").add_to(layer_hvdc)
 
-        # PST Markers
-        if 'psts' in data and len(data['psts']) > 0:
-            for pst in data['psts']:
-                coords = [pst['lat'], pst['lon']]
-                popup = f"""<b>PST: {pst['name']}</b><br>Angle: {pst['tap_pos']:.1f}°<br>Load: {pst['loading']:.1f}%"""
-                folium.Marker(coords, popup=popup, tooltip=f"PST {pst['name']}", icon=folium.Icon(color='purple', icon='random', prefix='fa')).add_to(layer_pst)
-
         # Buses
         for bus in data['buses']:
             target = layer_grid_380 if bus['vn_kv'] >= 380 else layer_grid_220
             self._add_detailed_bus(bus, target)
         
-        # [NEW] Disconnected Buses
+        # Disconnected Buses
         if 'disconnected' in data and len(data['disconnected']) > 0:
             for db in data['disconnected']:
                 popup = f"Disconnected Bus: {db['name']} ({db['vn_kv']}kV)"
@@ -87,7 +81,51 @@ class Visualizer:
         for eg in data['external_grids']:
             folium.Marker([eg['lat'], eg['lon']], popup=f"Slack: {eg['p_mw']:.1f}MW", icon=folium.Icon(color='red', icon='plug', prefix='fa')).add_to(layer_border)
 
-        for l in [layer_grid_380, layer_grid_220, layer_hvdc, layer_pst, layer_loading, layer_gen, layer_border, layer_disc, layer_inj]: l.add_to(m)
+        # trafos
+        if 'trafos' in data:
+            for t in data['trafos']:
+                coords = [[t['hv_lat'], t['hv_lon']], [t['lv_lat'], t['lv_lon']]]
+                popup_html = f"<b>TRAFO: {t['name']}</b><br>Load: {t['loading_percent']:.1f}%"
+                
+                folium.PolyLine(coords, color='orange', weight=3, dash_array='5, 5', opacity=0.8).add_to(layer_trafos)
+                
+                folium.CircleMarker(
+                    [t['hv_lat'], t['hv_lon']], 
+                    radius=4, 
+                    color='orange', fill=True, fill_opacity=1.0,
+                    popup=popup_html
+                ).add_to(layer_trafos)
+
+        # Loads
+        if 'loads' in data:
+            for l in data['loads']:
+                # size = min(50, max(14, 10 + math.log(total_p)*4))
+                # generators: (DivIcon size), load: CircleMarker (radius), so radius = size / 2
+                p_val = abs(l['p_mw'])
+                if p_val < 1: 
+                    p_val = 1.0 
+                diameter = min(50, max(14, 10 + math.log(p_val) * 4))
+                diameter = diameter * 0.85
+                radius = diameter / 2.0
+
+                popup_html = f"""
+                <b>LOAD: {l['name']}</b><br>
+                P: {l['p_mw']:.1f} MW<br>
+                Q: {l['q_mvar']:.1f} MVar
+                """
+                
+                folium.CircleMarker(
+                    [l['lat'], l['lon']], 
+                    radius=radius,
+                    color='#e74c3c', 
+                    fill=True, 
+                    fill_opacity=0.6,    
+                    popup=popup_html,
+                    tooltip=f"Load: {l['p_mw']:.0f} MW"
+                ).add_to(layer_loads)
+
+
+        for l in [layer_grid_380, layer_grid_220, layer_loading, layer_gen, layer_loads, layer_trafos, layer_hvdc, layer_border, layer_disc, layer_inj]: l.add_to(m)
         
         self._add_scenario_dashboard(m, scenario_info)
         self._add_unified_legend(m)
@@ -134,6 +172,7 @@ class Visualizer:
             rows += f"<tr><td>{g['type']}</td><td style='text-align:right'>{g['p_mw']:.1f}</td></tr>"
             
         size = min(50, max(14, 10 + math.log(total_p)*4))
+        size = size * 0.85
         icon = f'<div style="width:{size}px;height:{size}px;border-radius:50%;background:conic-gradient({", ".join(segments)});border:2px solid white;box-shadow:2px 2px 5px rgba(0,0,0,0.5);"></div>'
         popup = f"<div style='font-family:sans-serif;font-size:12px;'><b>Hub Gen: {total_p:.1f} MW</b><table>{rows}</table></div>"
         folium.Marker([lat, lon], icon=DivIcon(html=icon, icon_size=(size, size), icon_anchor=(size/2, size/2)), popup=folium.Popup(popup, max_width=300)).add_to(layer)
@@ -165,16 +204,21 @@ class Visualizer:
         <div style='background:#34495e;color:white;padding:5px;'><b>LINE: {line['name']}</b> ({vn:.0f}kV)</div>
         <table style='width:100%;margin-top:5px;'>
         <tr><td>From/To</td><td style='text-align:right'>{line['from_bus_id']} → {line['to_bus_id']}</td></tr>
-        <tr><td>Flow</td><td style='text-align:right'>{line.get('p_from_mw',0):.1f} MW</td></tr>
         <tr><td>Loading</td><td style='text-align:right;color:{status};'><b>{line['loading_percent']:.1f}%</b></td></tr>
+        <tr><td colspan=2 style='border-bottom:1px solid #ccc'></td></tr>
+        <tr><td>P (From)</td><td style='text-align:right'>{line.get('p_from_mw',0):.1f} MW</td></tr>
+        <tr><td>Q (From)</td><td style='text-align:right'>{line.get('q_from_mvar',0):.1f} MVar</td></tr>
+        <tr><td>Losses</td><td style='text-align:right'>{(abs(line.get('p_from_mw',0)) - abs(line.get('p_to_mw',0))):.2f} MW</td></tr>
         </table></div>"""
 
     def _create_bus_popup_html(self, bus):
         return f"""<div style='font-family:sans-serif;font-size:12px;'>
         <div style='background:#2980b9;color:white;padding:5px;'><b>BUS: {bus['name']}</b></div>
         <table style='width:100%;margin-top:5px;'>
-        <tr><td>Voltage</td><td style='text-align:right'>{bus['vn_kv']:.0f} kV</td></tr>
-        <tr><td>Actual</td><td style='text-align:right'>{(bus['vm_pu']*bus['vn_kv']):.2f} kV ({bus['vm_pu']:.3f} pu)</td></tr>
+        <tr><td>Voltage Level</td><td style='text-align:right'>{bus['vn_kv']:.0f} kV</td></tr>
+        <tr><td>Actual Voltage</td><td style='text-align:right'>{(bus['vm_pu']*bus['vn_kv']):.2f} kV</td></tr>
+        <tr><td>Per Unit</td><td style='text-align:right'>{bus['vm_pu']:.3f} pu</td></tr>
+        <tr><td>Angle</td><td style='text-align:right'>{bus.get('va_degree', 0):.2f}°</td></tr>
         </table></div>"""
 
     def _map_line_voltages(self, lines, buses):
@@ -214,10 +258,9 @@ class Visualizer:
 
     def _add_unified_legend(self, m):
         gen_html = "".join([f'<div style="margin-bottom:2px;"><span style="background:{c};width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px;"></span>{k}</div>' for k,c in sorted(config.GENERATOR_TYPE_COLORS.items()) if k!='default'])
-        html = f"""<div style="position:fixed;bottom:20px;right:10px;width:180px;max-height:350px;overflow-y:auto;background:rgba(255,255,255,0.9);border:1px solid #ccc;border-radius:5px;padding:8px;z-index:999;font-family:sans-serif;font-size:10px;">
+        html = f"""<div style="position:fixed;bottom:20px;right:10px;width:180px;max-height:200px;overflow-y:auto;background:rgba(255,255,255,0.9);border:1px solid #ccc;border-radius:5px;padding:8px;z-index:999;font-family:sans-serif;font-size:10px;">
         <h4 style="margin:0 0 5px 0;">Legend</h4>
         <b>Voltage</b><br><span style="color:#8E44AD">■ 380kV</span> <span style="color:#2980B9">■ 220kV</span> <span style="color:#FF6B35">-- HVDC</span><br>
-        <span style="color:purple;font-size:12px;">🔄 PST (Phase Shifter)</span><br>
         <span style="color:#7f8c8d;font-size:12px;">⚪ Disconnected</span><br>
         <div style="margin-top:5px;"><b>Line Loading</b><br>
         <span style="color:#27ae60">■ &lt;60%</span> <span style="color:#f39c12">■ 60-80%</span><br>
