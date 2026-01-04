@@ -12,6 +12,7 @@ data/intermediate_model/
 # Python Venv files
 share/
 pyvenv.cfg
+.venv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
