@@ -101,8 +101,21 @@ class Generator:
 					if isinstance(raw_generator["CommissionDate"]["$date"], str):
 						comm_year = int(raw_generator["CommissionDate"]["$date"][0:4])
 					elif isinstance(raw_generator["CommissionDate"]["$date"], dict):
-						ms_timestamp = int(raw_generator["CommissionDate"]["$date"]["$numberLong"])
-						comm_year = datetime.utcfromtimestamp(ms_timestamp/1000).year
+						try:
+							ms_timestamp = int(raw_generator["CommissionDate"]["$date"]["$numberLong"])
+
+							# sanity checks for Windows
+							if ms_timestamp <= 0:
+								raise ValueError("non-positive timestamp")
+
+							# optional upper bound, year ~3000
+							if ms_timestamp > 32503680000000:
+								raise ValueError("timestamp too large")
+
+							comm_year = datetime.utcfromtimestamp(ms_timestamp / 1000).year
+
+						except (OSError, OverflowError, ValueError):
+							comm_year = 0
 
 				coords = Coords(raw_generator["Latitude"], raw_generator["Longitude"])
 
