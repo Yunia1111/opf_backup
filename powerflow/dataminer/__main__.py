@@ -9,6 +9,11 @@ MAX_DISTANCE_SAME_CONN_POINT_M = 20
 MAX_DISTANCE_BRANCH_M = 10
 MAX_DISTANCE_SUBSTATION_M = 500
 
+DEFAULT_SCENARIO = {
+	'min_voltage': 200000,
+	'year': 2100,
+}
+
 # TODO: Should support exporting filtered variants of data
 # e.G. "Only this circular area" or "Only over 200kV"
 
@@ -41,12 +46,14 @@ if not os.path.exists(csv_dir):
 
 
 
-def main(only_prep_gens=False):
+def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 
+	# TODO: Convert to general filter with:
+	# - comm_year
+	# - location
 	def voltageFilter(item):
 
-		# Ignore under 200kV for now
-		if item.max_v() < 200000:
+		if item.max_v() < scenario['min_voltage']:
 			return False
 
 		return True
@@ -86,7 +93,7 @@ def main(only_prep_gens=False):
 			raw_nep_items = json.load(f)
 
 		added_cap_num = defaultdict(int)
-		added_cap_sum = defaultdict(int)
+		added_cap_sum_mva = defaultdict(int)
 		added_cap_sum_rel = defaultdict(int)
 
 		sub_not_found = 0
@@ -102,20 +109,24 @@ def main(only_prep_gens=False):
 
 			print(f"NEP {ni:>5}/{len(raw_nep_items)}", end='\r')
 
+			mva_base = 0
+
 			# try to find existing item
 			nep_element = nep_item["properties"]["Element"].lower()
 			nep_elements = nep_element.split(', ')
 			if "substation" in nep_elements:
 
 				coords = Coords(reversed(nep_item["geometry"]["coordinates"]))
-				closest_sub = Node.get(Substation.search_closest(coords)[0])
-				distance = closest_sub.coords.distance_to(coords)
-				if (distance < MAX_DISTANCE_SAME_SUBSTATION_M):
-					mva_base = closest_sub.power / 1e6
+				close_subs = Substation.search(coords, MAX_DISTANCE_SAME_SUBSTATION_M)
+				if len(close_subs) >= 1:
+					total_power = sum([Node.get(sub).power for sub in close_subs])
+					mva_base = (total_power / len(close_subs)) / 1e6
+					# Note down for later
+					nep_item['_existing_subs'] = close_subs
 				else:
 					sub_not_found += 1
 
-			elif "line" in nep_elements or "cable" in nep_elements:
+			if "line" in nep_elements or "cable" in nep_elements:
 
 				conn_counter += 1
 
@@ -136,51 +147,53 @@ def main(only_prep_gens=False):
 				if len(found_conns) >= 1:
 					found_conn_counter += 1
 
-					# TODO: Save found_conns per nep_item
-					# so we don't have to recompute them in pass 2
+					# Save found_conns for later
+					nep_item['_existing_conns'] = found_conns
 
-					mva_base = 0
-					num_systems = 0
-					for cid in list(found_conns):
-						conn = Connection.get(cid)
-						for c in conn.circuits:
-							mva_base += c.capacity or c.fallback_capacity()
-							num_systems += c.systems
-					mva_base /= len(found_conns)
-					num_systems = round(num_systems/len(found_conns))
+					if not nep_item["properties"].get("Added Capacity"):
 
-					mva_new = num_systems * 380 * 2 # everything in EHV is being upgraded to 380kV 2kA basically. Stefan said this is fine.
-					mva_inc = mva_new - mva_base
+						num_systems = 0
+						for cid in list(found_conns):
+							conn = Connection.get(cid)
+							for c in conn.circuits:
+								mva_base += c.capacity or c.fallback_capacity()
+								num_systems += c.systems
+						mva_base /= len(found_conns)
+						num_systems = round(num_systems/len(found_conns))
 
-					for el in nep_elements:
-						added_cap_num[el] += 1
-						added_cap_sum[el] += mva_inc
-						added_cap_sum_rel[el] += mva_inc/mva_base
+						mva_new = num_systems * 380 * 2 # everything in EHV is being upgraded to 380kV 2kA basically. Stefan said this is fine.
+						mva_inc = mva_new - mva_base
+
+						for el in nep_elements:
+							added_cap_num[el] += 1
+							added_cap_sum_mva[el] += mva_inc
+							added_cap_sum_rel[el] += mva_inc/mva_base
 
 			# calc added cap
 			added_cap = nep_item["properties"].get("Added Capacity")
-			if added_cap:
+			if added_cap and mva_base > 0:
 				if added_cap[-4:] == " MVA":
 					mva_inc = int(added_cap[:-4])
 					for el in nep_elements:
 						added_cap_num[el] += 1
-						added_cap_sum[el] += mva_inc
+						added_cap_sum_mva[el] += mva_inc
 						added_cap_sum_rel[el] += mva_inc/mva_base
+
+					nep_item['_cap_inc_mva'] = mva_inc
+					nep_item['_cap_inc_rel'] = mva_inc/mva_base
 				else:
 					print('')
 					print('Offending NEP entry:')
 					print(nep_item)
 					raise Exception("Not '\\d MVA'")
 
-			comm_year = nep_item["properties"]["Commissioning Date"]
-
-			# QUESTION: Also process new voltages, frequencies?
-
+		average_added_cap_mva = {el: cap_sum_mva/added_cap_num[el] for el, cap_sum_mva in added_cap_sum_mva.items()}
 		average_added_cap_rel = {el: cap_sum_rel/added_cap_num[el] for el, cap_sum_rel in added_cap_sum_rel.items()}
 
 		print('')
 		print("NEP first pass done:")
-		print(average_added_cap_rel)
+		print('MVA:', average_added_cap_mva)
+		print('rel:', average_added_cap_rel)
 		print(sub_not_found, "Substations could not be correlated.")
 		print(f"{found_conn_counter}/{conn_counter} connections could be correlated.")
 
@@ -188,7 +201,92 @@ def main(only_prep_gens=False):
 		# Add the data to the model (new power, voltages, etc. with comm_year flag)
 		print("Adding NEP entries...")
 
-		# TODO
+		for ni, nep_item in enumerate(raw_nep_items):
+
+			print(f"NEP {ni:>5}/{len(raw_nep_items)}", end='\r')
+
+			nep_element = nep_item["properties"]["Element"].lower()
+			nep_elements = nep_element.split(', ')
+
+			# Skip if later than scenario year
+			try:
+				comm_year = int(nep_item["properties"]['Commissioning Date'])
+				if comm_year > scenario['year']:
+					print("\nNot commissioned yet:", comm_year)
+					continue
+			except ValueError:
+				print("\nNo commissioning year:", nep_item["properties"]['Commissioning Date'])
+				pass
+
+			# Otherwise, apply power increase
+			if "substation" in nep_elements:
+
+				if '_existing_subs' in nep_item:
+					for sub_id in nep_item['_existing_subs']:
+						sub = Node.get(sub_id)
+						if '_cap_inc_mva' in nep_item:
+							sub.power += nep_item['_cap_inc_mva']
+						else:
+							sub.power *= average_added_cap_rel["substation"]
+				else:
+					added_cap = nep_item["properties"].get("Added Capacity")
+					if added_cap and added_cap[-4:] == " MVA":
+						power_mva = int(added_cap[:-4])
+					else:
+						power_mva = average_added_cap_mva["substation"]
+
+					sub_props = {
+						'Id': nep_item['_id']['$oid'], # Unfortunately no more stable ID available
+						'Latitude': nep_item["geometry"]["coordinates"][1],
+						'Longitude': nep_item["geometry"]["coordinates"][0],
+						'Name': nep_item["properties"]["Name"],
+						'Operator': nep_item["properties"]["Operator"],
+						'_Power': power_mva,
+					}
+					for key, voltage in nep_item["properties"].items():
+						if key.startswith('Voltage_'):
+							sub_props[f"KV{int(voltage)//1000}"] = True
+
+					Substation(sub_props, filter_f=voltageFilter)
+
+			if "line" in nep_elements or "cable" in nep_elements:
+
+				# NOTE: We diregard the "upgraded line" situation
+				# because it's incredibly hard to correlate them
+				# Therefore, a new line for each NEP entry. Should be fine.
+
+				added_cap = nep_item["properties"].get("Added Capacity")
+				if added_cap and added_cap[-4:] == " MVA":
+					power_mva = int(added_cap[:-4])
+				else:
+					power_mva = average_added_cap_mva["substation"]
+
+				voltages = [int(voltage) for key, voltage in nep_item["properties"].items() if key.startswith('Voltage_') and voltage and voltage != "N/A"]
+				if len(voltages) < 1:
+					voltages = [380000]
+
+				# QUESTION: Split power increase proportionately into voltages instead of equally?
+				capacities = {voltage*1000: (power_mva/len(voltages)) for voltage in voltages} # MVA
+
+				frequency = nep_item["properties"]["Frequency"]
+				circuits = len(voltages) # or more depending on capacity?
+				cables = circuits * (3 if frequency == '50' else 2)
+
+				Connection(
+					nep_item['_id']['$oid'], # Unfortunately no more stable ID available
+					ConnType.LINE if "line" in nep_elements else ConnType.CABLE,
+					voltages,
+					capacities,
+					{},
+					{},
+					frequency,
+					str(circuits),
+					str(cables),
+					nep_item["properties"]["Operator"],
+					nep_item["geometry"]["coordinates"],
+					filter_f=voltageFilter
+				)
+
 
 		print("NEP second pass done.")
 
@@ -393,12 +491,12 @@ def main(only_prep_gens=False):
 
 	Generator.write_csv(csv_dir + "generators.csv")
 
-	#create_map(
-	#	Node._all.values(),
-	#	Connection._all.values(),
-	#	[], #Generator._all.values(),
-	#	"maps/debug_map.html"
-	#)
+	create_map(
+		Node._all.values(),
+		Connection._all.values(),
+		[], #Generator._all.values(),
+		"maps/debug_map.html"
+	)
 
 
 

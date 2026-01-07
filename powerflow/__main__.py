@@ -45,7 +45,7 @@ for i, command in enumerate(commands):
 	module, function = command_tasks[command]
 
 	i = importlib.import_module('powerflow.'+module)
-	getattr(i, function)()
+	getattr(i, function)() # TODO: Insert common scenario format as argument here
 
 	dm, ds = divmod(time.time() - start_time, 60)
 	print(f"Finished task '{command}' after {dm:.0f}:{ds:02.0f}.")

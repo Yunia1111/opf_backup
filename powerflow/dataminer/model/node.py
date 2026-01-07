@@ -198,9 +198,12 @@ class Substation(Node):
 			filter_f=filter_f,
 		)
 
-		# Power estimate
-		# Will be improved using transformer data later
-		self.power = (600 * 1e6) if self.max_v() > 200000 else 80 * 1e6
+		if '_Power' in properties:
+			self.power = properties['_Power'] * 1e6
+		else:
+			# Power estimate
+			# Will be improved using transformer data later
+			self.power = (600 * 1e6) if self.max_v() > 200000 else 80 * 1e6
 
 		self.transformers = []
 		self.update_transformers()
