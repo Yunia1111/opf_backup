@@ -1,5 +1,1 @@
 name;capacity_mw;voltage_kv;from_lat;from_lon;to_lat;to_lon;in_service
-SuedLink_1;2000;525;53.895;9.140;49.143;9.120;true
-SuedLink_2;2000;525;53.923;9.375;50.015;10.170;true
-SuedOstLink;2000;525;52.248;11.625;48.608;12.298;true
-SuedOstLink_Plus;2000;525;53.605;11.350;48.608;12.298;true

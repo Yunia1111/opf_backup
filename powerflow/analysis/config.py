@@ -12,11 +12,11 @@ DEFAULT_SLACK_VA_DEGREE = 0.0
 
 # ========== Cache Settings ==========
 # Set True to rebuild network from CSVs; False to load from .pkl (Faster)
-FORCE_NETWORK_REBUILD = True
+FORCE_NETWORK_REBUILD = False
 NETWORK_CACHE_FILE = "german_grid_base_cache.pkl"
 
 # ========== Feature Flags ==========
-RUN_INJECTION_ANALYSIS = True 
+RUN_INJECTION_ANALYSIS = False
 
 # ========== PV/PQ Control Strategy ==========
 PV_CONTROL_STRATEGY = 'all_gen_buses'
@@ -40,9 +40,9 @@ PF_ALGORITHM_SEQUENCE = ['nr', 'bfsw', 'gs']
 
 # ========== Optimal Power Flow (OPF) Settings ==========
 OPF_SOLVER = 'pypower'  # Using stable Python solver
-OPF_VERBOSE = True      # ENABLED: Better visibility during solving
+OPF_VERBOSE = False     
 OPF_CALCULATE_VOLTAGE_ANGLES = True
-OPF_TOLERANCE = 1e-4    # Tightened tolerance for accuracy
+OPF_TOLERANCE = 1e-4    
 
 POWERMODELS_MODEL = 'ACRLPowerModel' 
 POWERMODELS_SOLVER = 'ipopt'

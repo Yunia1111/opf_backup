@@ -1,281 +1,206 @@
 """
 Main program for multi-scenario optimal power flow calculation.
-Build Base Net -> Run Scenarios (OPF) -> Summarize -> Injection Analysis.
+Build Base Net -> Run Scenarios (OPF) -> Summarize.
 """
 import sys
 import os
 import pandas as pd
+import numpy as np
 import time
+import warnings
 from . import config
 from . import grid_building
 from . import opf
 from . import report_export
-from . import visualization
-from . import injections
 
-# Try importing scenarios, handle missing file gracefully
+# 忽略不必要的 Pandas 警告
+warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.simplefilter(action='ignore', category=UserWarning)
+
+# Try importing scenarios
 try:
-    from .scenarios import SCENARIOS # Updated Import
+    from .scenarios import SCENARIOS
 except ImportError:
     print("CRITICAL ERROR: 'scenarios.py' not found.")
-    print("Please ensure scenarios.py exists with a dictionary named SCENARIOS.")
     sys.exit(1)
 
 def main():
     print("\n" + "="*80)
-    print("GERMAN GRID MULTI-SCENARIO OPF ANALYSIS (V2.1 - Production)")
+    print("GERMAN GRID MULTI-SCENARIO OPF ANALYSIS (V2.5 - Robust)")
     print("="*80 + "\n")
 
-    # Pre-flight check
+    # 1. Load Grid
+    # ==============================================================================
     if not os.path.exists(config.DATA_DIR):
         print(f"ERROR: Data directory '{config.DATA_DIR}' not found.")
         sys.exit(1)
 
-    all_results = []
-    solved_networks = {}
-
+    print("[STEP 1/2] Building static base network (net_0)...")
     try:
-        # ==============================================================================
-        # STEP 1: BUILD STATIC BASE NETWORK (net_0)
-        # ==============================================================================
-        print("[STEP 1/2] Building static base network (net_0)...")
-        print("─" * 80)
-
-        # Updated Class Instantiation
         modeler = grid_building.GridModeler()
         base_net, external_grids = modeler.create_base_network()
-
-        total_gen_nameplate = base_net.gen['p_mw'].sum() + base_net.sgen['p_mw'].sum()
-        total_load_nameplate = base_net.load['p_mw'].sum()
-        print(f"\n  ✓ Base network (net_0) ready: {len(base_net.bus)} buses, "
-              f"{len(base_net.line)} lines, {len(base_net.gen)} PV, "
-              f"{len(base_net.sgen)} PQ, {len(base_net.storage)} storage")
-        print(f"  > Nameplate Capacity: Gen={total_gen_nameplate:,.0f} MW, Load={total_load_nameplate:,.0f} MW")
-
-        # Updated Class Instantiation
-        opf_engine = opf.OPFEngine(base_net, external_grids)
-
-        # ==============================================================================
-        # STEP 2: RUN SCENARIOS (net_1, net_2, ...)
-        # ==============================================================================
-        print("\n" + "="*80)
-        print("[STEP 2/2] Running scenarios with OPF Engine...")
-        print("="*80)
-
-        # --- SCENARIO SELECTION ---
-        # Run ALL scenarios defined in scenarios.py
-        #scenario_list = list(SCENARIOS.keys())
-        scenario_list = ['average_of_2024']
-
-        print(f"\nTotal scenarios to run: {len(scenario_list)}")
-        print(f"Scenarios: {', '.join(scenario_list)}\n")
-
-        for i, scenario_name in enumerate(scenario_list, 1):
-            scenario_start_time = time.time()
-
-            print("─" * 80)
-            print(f"[{i}/{len(scenario_list)}] SCENARIO: {scenario_name.upper()}")
-
-            # Run the scenario through the OPF Engine
-            scenario_net, scenario_info, converged = opf_engine.run_scenario(scenario_name)
-
-            scenario_time = time.time() - scenario_start_time
-
-            # Calculate results
-            scenario_results = calculate_scenario_results(scenario_net, scenario_info, scenario_time)
-            scenario_results['scenario'] = scenario_name
-            all_results.append(scenario_results)
-
-            # Print intermediate results
-            print_scenario_summary(scenario_results)
-
-            if not converged:
-                print(f"  ✗ Scenario {scenario_name} FAILED to converge. Skipping export.")
-                # We still store non-converged results for comparison, but don't use for injection
-                continue
-
-            # Store the solved network for Warm Start
-            solved_networks[scenario_name] = scenario_net
-
-            print(f"  ✓ OPF converged ({scenario_time:.1f}s). Exporting results...")
-
-            # Updated Class Instantiation
-            exporter = report_export.ReportGenerator(scenario_net)
-            visualizer = visualization.Visualizer()
-
-            exporter.export_all(scenario_name)
-            visualizer.create_map(scenario_net, scenario_info)
-
-        # ==============================================================================
-        # STEP 3: COMPARISON SUMMARY
-        # ==============================================================================
-        print("\n" + "="*80)
-        print("SCENARIO COMPARISON SUMMARY")
-        print("="*80 + "\n")
-
-        if all_results:
-            df_results = pd.DataFrame(all_results)
-            print_comparison_table(df_results)
-
-            os.makedirs(config.OUTPUT_DIR, exist_ok=True)
-            comparison_file = os.path.join(config.OUTPUT_DIR, "scenario_comparison.csv")
-            df_results.to_csv(comparison_file, index=False, float_format='%.2f')
-            print(f"\n✓ Comparison table saved to: {comparison_file}")
-        else:
-            print("No results to summarize.")
-
-        # ==============================================================================
-        # STEP 4: MANUAL INJECTION ANALYSIS (With Warm Start)
-        # ==============================================================================
-        if config.RUN_INJECTION_ANALYSIS:
-            print("\n" + "="*80)
-            print("MANUAL INJECTION CAPACITY ANALYSIS")
-            print("="*80)
-
-            # Updated Class Instantiation
-            analyzer = injections.InjectionAnalyzer(base_net, external_grids)
-
-            # --- USER INPUT: Coordinates (Example: Near Munich) ---
-            target_lat = 48.13
-            target_lon = 11.58
-
-            # --- USER INPUT: Background Scenario ---
-            # Automatically pick the first successful scenario if 'average_of_2024' isn't available
-            INJECTION_SCENARIO = 'average_of_2024'
-            if INJECTION_SCENARIO not in solved_networks and len(solved_networks) > 0:
-                INJECTION_SCENARIO = list(solved_networks.keys())[0]
-                print(f"  ! Default scenario not found, switching to: {INJECTION_SCENARIO}")
-
-            base_result_net = None
-
-            if INJECTION_SCENARIO in solved_networks:
-                print(f"  ★ Warm Start Available: Using pre-calculated results from '{INJECTION_SCENARIO}'")
-                base_result_net = solved_networks[INJECTION_SCENARIO]
-            else:
-                print(f"  ⚠ Warm Start NOT Available for '{INJECTION_SCENARIO}'.")
-                print(f"    Running Cold Start...")
-
-            analyzer.analyze_hosting_capacity(
-                target_lat, target_lon,
-                scenario_name=INJECTION_SCENARIO,
-                base_result_net=base_result_net
-            )
-        else:
-            print("\n[INFO] Injection Analysis skipped (RUN_INJECTION_ANALYSIS = False).")
-
     except Exception as e:
-        print(f"\n✗ Error during main execution: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"CRITICAL: Grid building failed. {e}")
         sys.exit(1)
 
-# --- Helper functions ---
+    # 2. Run Scenarios
+    # ==============================================================================
+    print("\n" + "="*80)
+    print("[STEP 2/2] Running scenarios with OPF Engine...")
+    print("="*80 + "\n")
 
-def calculate_scenario_results(net, scenario_info, solve_time):
-    try:
-        gen_p = net.res_gen[net.gen['type'] != 'border']['p_mw'].sum()
-        sgen_p = net.res_sgen['p_mw'].sum()
-        total_gen_domestic = gen_p + sgen_p
+    engine = opf.OPFEngine(base_net, external_grids)
+    all_results = []
+    
+    # 获取场景列表
+    scenario_list = list(SCENARIOS.keys())
+    scenario_list = ['average_of_2025']
+    print(f"Total scenarios to run: {len(scenario_list)}")
+    print(f"Scenarios: {', '.join(scenario_list)}")
 
-        storage_p = net.res_storage['p_mw']
-        storage_discharge = storage_p[storage_p > 0].sum()
-        storage_charge = abs(storage_p[storage_p < 0].sum())
-
-        border_p = net.res_gen[net.gen['type'] == 'border']['p_mw'].sum()
-        slack_p = net.res_ext_grid['p_mw'].sum()
-        net_import = border_p + slack_p
-
-        fixed_load = net.load['p_mw'].sum()
-
-        line_losses = net.res_line['pl_mw'].sum() if len(net.res_line) > 0 else 0
-        trafo_losses = net.res_trafo['pl_mw'].sum() if len(net.res_trafo) > 0 else 0
-        total_losses = line_losses + trafo_losses
-
-        v_low = (net.res_bus['vm_pu'] < config.BUS_MIN_VM_PU).sum()
-        v_high = (net.res_bus['vm_pu'] > config.BUS_MAX_VM_PU).sum()
-        voltage_violations = v_low + v_high
-
-        max_line_loading = net.res_line['loading_percent'].max() if len(net.res_line) > 0 else 0
-        overloaded_lines = (net.res_line['loading_percent'] > 100).sum() if len(net.res_line) > 0 else 0
-
-        total_cost = net.res_cost if hasattr(net, 'res_cost') else 0
-
-        return {
-            'converged': hasattr(net, 'OPF_converged') and net.OPF_converged,
-            'solve_time_s': solve_time,
-            'total_gen_mw': total_gen_domestic,
-            'total_load_mw': fixed_load,
-            'storage_discharge_mw': storage_discharge,
-            'storage_charge_mw': storage_charge,
-            'net_import_mw': net_import,
-            'gen_load_ratio': scenario_info['gen_load_ratio'],
-            'renewable_gen_mw': scenario_info['renewable_gen_mw'],
-            'renewable_pct': scenario_info['renewable_pct'],
-            'total_cost_eur_per_h': total_cost,
-            'line_losses_mw': total_losses,
-            'loss_pct': (total_losses / fixed_load * 100) if fixed_load > 0 else 0,
-            'max_line_loading_pct': max_line_loading,
-            'overloaded_lines': overloaded_lines,
-            'voltage_violations': voltage_violations
+    for i, scen_name in enumerate(scenario_list):
+        print(f"\n" + "─"*80)
+        print(f"[{i+1}/{len(scenario_list)}] SCENARIO: {scen_name.upper()}")
+        
+        start_t = time.time()
+        
+        # --- A. 初始化结果字典 (默认全是 NaN) ---
+        # 这样即使计算失败，Key 也存在，不会报 KeyError
+        res = {
+            'scenario': scen_name,
+            'converged': False,
+            'solve_time_s': 0.0,
+            'total_cost_eur_per_h': np.nan,
+            'total_load_mw': np.nan,
+            'total_gen_mw': np.nan,
+            'gen_load_ratio': np.nan,
+            'net_import_mw': np.nan,
+            'line_losses_mw': np.nan,
+            'loss_pct': np.nan,
+            'max_line_loading_pct': np.nan,
+            'voltage_violations': 0,
+            'num_lines_overloaded': 0
         }
-    except Exception as e:
-        print(f"Error in calculation: {e}")
-        return {}
 
-def print_scenario_summary(results):
-    cost = results.get('total_cost_eur_per_h', 0)
-    losses = results.get('line_losses_mw', 0)
-    loss_pct = results.get('loss_pct', 0)
-    gen = results.get('total_gen_mw', 0)
-    load = results.get('total_load_mw', 0)
-    stor_dis = results.get('storage_discharge_mw', 0)
-    stor_chg = results.get('storage_charge_mw', 0)
-    imp = results.get('net_import_mw', 0)
+        try:
+            # --- B. 运行 OPF ---
+            # run_scenario 现在支持处理字符串或字典
+            net, info, converged = engine.run_scenario(scen_name)
+            duration = time.time() - start_t
+            
+            res['converged'] = converged
+            res['solve_time_s'] = round(duration, 2)
 
-    print(f"\n  Key Results (Post-OPF):")
-    print(f"    Total Cost:        {cost:>10,.0f} €/h")
-    print(f"    Domestic Gen:      {gen:>10.1f} MW")
-    print(f"    Storage Discharge: {stor_dis:>10.1f} MW (+)")
-    print(f"    Net Import:        {imp:>10.1f} MW")
-    print(f"    Fixed Load:        {load:>10.1f} MW")
-    print(f"    Storage Charge:    {stor_chg:>10.1f} MW (-)")
-    print(f"    Losses:            {losses:>10.1f} MW ({loss_pct:.2f}%)")
-    print(f"    Max Line Loading:  {results.get('max_line_loading_pct',0):>10.1f}%")
+            # --- C. 提取结果 (仅在收敛且有结果时) ---
+            if converged and not net.res_line.empty:
+                # 1. 成本
+                res['total_cost_eur_per_h'] = net.res_cost
 
-    if results.get('overloaded_lines', 0) > 0:
-        print(f"    ⚠ Overloaded Lines: {results['overloaded_lines']}")
+                # 2. 负荷与发电 (直接从 info 获取更安全)
+                res['total_load_mw'] = info.get('total_load_mw', 0.0)
+                res['total_gen_mw'] = info.get('total_gen_mw', 0.0)
+                
+                # 3. 比例与进口
+                if res['total_load_mw'] > 0:
+                    res['gen_load_ratio'] = (res['total_gen_mw'] / res['total_load_mw']) * 100
+                else:
+                    res['gen_load_ratio'] = 0.0
+                
+                res['net_import_mw'] = res['total_load_mw'] - res['total_gen_mw']
+
+                # 4. 线路损耗
+                res['line_losses_mw'] = net.res_line['pl_mw'].sum()
+                if res['total_load_mw'] > 0:
+                    res['loss_pct'] = (res['line_losses_mw'] / res['total_load_mw']) * 100
+                
+                # 5. 负载率
+                res['max_line_loading_pct'] = net.res_line['loading_percent'].max()
+                res['num_lines_overloaded'] = len(net.res_line[net.res_line['loading_percent'] > 100])
+
+                # 6. 电压违规 (0.90 - 1.10 pu)
+                v_violations = len(net.res_bus[(net.res_bus['vm_pu'] < 0.90) | (net.res_bus['vm_pu'] > 1.10)])
+                res['voltage_violations'] = v_violations
+
+                # 7. 导出报告
+                exporter = report_export.ReportGenerator(net)
+                exporter.export_all(scen_name)
+                
+                print(f"  ✓ Converged. Cost: {res['total_cost_eur_per_h']:,.0f} €/h")
+
+            else:
+                print(f"  ✗ Scenario {scen_name} FAILED to converge. Skipping extraction.")
+
+        except Exception as e:
+            print(f"  ✗ Error calculating results for {scen_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            # 即使报错，res 字典里也有默认值，不会导致后续表格崩溃
+        
+        all_results.append(res)
+
+    # 3. Summary Table
+    # ==============================================================================
+    if len(all_results) > 0:
+        df_results = pd.DataFrame(all_results)
+        print_comparison_table(df_results)
+        
+        # Save Summary CSV
+        sum_path = os.path.join(config.OUTPUT_DIR, 'scenario_comparison_summary.csv')
+        df_results.to_csv(sum_path, index=False)
+        print(f"\nFull comparison saved to: {sum_path}")
+    else:
+        print("\nNo results generated.")
 
 def print_comparison_table(df):
-    if df.empty: return
-    display_cols = [
+    """
+    Prints a nicely formatted ASCII table of the results.
+    Handles NaN/None values gracefully.
+    """
+    print("\n" + "="*80)
+    print("SCENARIO COMPARISON SUMMARY")
+    print("="*80 + "\n")
+    
+    # 确保需要的列都在 (防止 KeyError)
+    needed_cols = [
         'scenario', 'gen_load_ratio', 'total_cost_eur_per_h',
         'line_losses_mw', 'loss_pct', 'max_line_loading_pct',
         'voltage_violations', 'converged', 'solve_time_s'
     ]
-    df_display = df[display_cols].copy()
-    df_display['scenario'] = df_display['scenario'].str.replace('_', ' ').str.title()
+    
+    # 检查缺失列并补全
+    for col in needed_cols:
+        if col not in df.columns:
+            df[col] = np.nan
 
-    print(f"{'Scenario':<25} {'Gen/Load':>9} {'Cost(€/h)':>12} {'Loss(MW)':>10} "
-          f"{'Loss%':>7} {'MaxLoad%':>9} {'VViol':>6} {'Status':>8} {'Time(s)':>8}")
-    print("─" * 120)
+    # 格式化打印
+    header = f"{'Scenario':<25} {'Gen/Load%':>10} {'Cost(€/h)':>12} {'Loss(MW)':>10} {'Loss%':>7} {'MaxLoad%':>9} {'VViol':>6} {'Status':>8} {'Time':>6}"
+    print(header)
+    print("─" * 100)
 
-    for _, row in df_display.iterrows():
+    for _, row in df.iterrows():
+        # 处理可能的 NaN
         status = "✓" if row['converged'] else "✗"
-        cost_str = f"{row['total_cost_eur_per_h']:,.0f}" if pd.notna(row['total_cost_eur_per_h']) else "N/A"
-        loss_mw_str = f"{row['line_losses_mw']:>10.1f}" if pd.notna(row['line_losses_mw']) else "N/A"
-        loss_pct_str = f"{row['loss_pct']:>7.2f}" if pd.notna(row['loss_pct']) else "N/A"
-        max_load_str = f"{row['max_line_loading_pct']:>9.1f}" if pd.notna(row['max_line_loading_pct']) else "N/A"
-        vviol_str = f"{row['voltage_violations']:>6.0f}" if pd.notna(row['voltage_violations']) else "N/A"
+        
+        def fmt(val, precision=1, use_comma=False):
+            if pd.isna(val): return "N/A"
+            if use_comma: return f"{val:,.0f}"
+            return f"{val:.{precision}f}"
 
-        print(f"{row['scenario']:<25} "
-              f"{row['gen_load_ratio']:>9.3f} "
-              f"{cost_str:>12} "
-              f"{loss_mw_str:>10} "
-              f"{loss_pct_str:>7} "
-              f"{max_load_str:>9} "
-              f"{vviol_str:>6} "
-              f"{status:>8} "
-              f"{row['solve_time_s']:>8.1f}")
+        scen_label = row['scenario'].replace('_', ' ').title()[:24]
+        
+        line = (
+            f"{scen_label:<25} "
+            f"{fmt(row['gen_load_ratio']):>10} "
+            f"{fmt(row['total_cost_eur_per_h'], 0, True):>12} "
+            f"{fmt(row['line_losses_mw']):>10} "
+            f"{fmt(row['loss_pct'], 2):>7} "
+            f"{fmt(row['max_line_loading_pct']):>9} "
+            f"{fmt(row['voltage_violations'], 0):>6} "
+            f"{status:>8} "
+            f"{fmt(row['solve_time_s']):>6}"
+        )
+        print(line)
+    print("─" * 100)
 
 if __name__ == "__main__":
     main()
