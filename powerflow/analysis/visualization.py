@@ -1,7 +1,7 @@
 """
 Visualizer - Generates interactive folium maps of the power grid.
-MERGED VERSION: High-detail layers + Voltage Heatmap + Directional Arrows + Robust Coord Parsing.
-FIXED: Hover Tooltips for Lines with Detailed Data.
+FIXED: Correctly calculates total capacity for parallel lines.
+FIXED: Storage markers are now small CircleMarkers (radius=4).
 """
 import folium
 from folium import plugins
@@ -45,19 +45,18 @@ class Visualizer:
         folium.TileLayer('CartoDB dark_matter', name='🌑 Dark Mode').add_to(m)
         folium.TileLayer('CartoDB positron', name='☀️ Light Mode').add_to(m)
         
-        # Layers
         layer_grid_380 = folium.FeatureGroup(name='380kV Grid (Voltage Status)', show=False)
         layer_grid_220 = folium.FeatureGroup(name='220kV Grid (Voltage Status)', show=False)
-        layer_hvdc     = folium.FeatureGroup(name='HVDC Corridors', show=True) 
+        layer_dc_lines = folium.FeatureGroup(name='DC Lines', show=True)  
         layer_loading  = folium.FeatureGroup(name='Line Loading', show=True)
         layer_gen      = folium.FeatureGroup(name='Generation (Pie Charts)', show=False)
+        layer_storage  = folium.FeatureGroup(name='Storage Units', show=False)
         layer_border   = folium.FeatureGroup(name='Border Flows (Arrows)', show=True)
         layer_inj      = folium.FeatureGroup(name='Injection Analysis', show=True)
-        layer_disc     = folium.FeatureGroup(name='Disconnected Components', show=True) 
+        layer_disc     = folium.FeatureGroup(name='Disconnected Components', show=False) 
         layer_trafos   = folium.FeatureGroup(name='Transformers', show=False)
         layer_loads    = folium.FeatureGroup(name='Loads', show=False)
 
-        # Lines (AC)
         line_v_map = self._map_line_voltages(data['lines'], data['buses'])
         for line in data['lines']:
             vn = line_v_map.get(line['id'], 380)
@@ -65,15 +64,16 @@ class Visualizer:
             self._add_detailed_line(line, vn, target, False)
             self._add_detailed_line(line, vn, layer_loading, True)
         
-        # HVDC Lines
         if 'dclines' in data:
             for dc in data['dclines']:
                 coords = [[dc['from_lat'], dc['from_lon']], [dc['to_lat'], dc['to_lon']]]
                 util = abs(dc['p_mw']) / dc['capacity'] * 100 if dc['capacity'] > 0 else 0
-                popup = f"<b>HVDC: {dc['name']}</b><br>Flow: {dc['p_mw']:.1f} MW<br>Util: {util:.1f}%"
-                folium.PolyLine(coords, color='#FF6B35', weight=4, dash_array='10, 10', opacity=1, popup=popup, tooltip=f"HVDC {dc['p_mw']:.0f} MW").add_to(layer_hvdc)
+                popup = f"<b>DC LINE: {dc['name']}</b><br>Flow: {dc['p_mw']:.1f} MW<br>Util: {util:.1f}%"
+                folium.PolyLine(
+                    coords, color='#FF6B35', weight=4, dash_array='10, 10', opacity=1, 
+                    popup=popup, tooltip=f"DC Line {dc['p_mw']:.0f} MW"
+                ).add_to(layer_dc_lines)
 
-        # Buses
         for bus in data['buses']:
             target = layer_grid_380 if bus['vn_kv'] >= 380 else layer_grid_220
             vm_pu = bus.get('vm_pu', 1.0)
@@ -86,17 +86,18 @@ class Visualizer:
                 tooltip=f"{bus['name']} ({bus['vm_pu']:.3f} pu)"
             ).add_to(target)
         
-        # Disconnected
+        if 'storage_units' in data:
+            for s in data['storage_units']:
+                self._add_storage_marker(s, layer_storage)
+
         if 'disconnected' in data and len(data['disconnected']) > 0:
             for db in data['disconnected']:
                 folium.CircleMarker([db['lat'], db['lon']], radius=3, color='#7f8c8d', fill=True, fill_color='#7f8c8d', fill_opacity=0.6, popup=f"Disconnected: {db['name']}").add_to(layer_disc)
 
-        # Generators & Borders
         self._add_aggregated_generators(data['generators'], layer_gen, layer_border, layer_inj)
         for eg in data['external_grids']:
             self._add_directional_arrow(eg, layer_border, is_slack=True)
 
-        # Trafos
         if 'trafos' in data:
             for t in data['trafos']:
                 coords = [[t['hv_lat'], t['hv_lon']], [t['lv_lat'], t['lv_lon']]]
@@ -104,7 +105,6 @@ class Visualizer:
                 folium.PolyLine(coords, color='orange', weight=3, dash_array='5, 5', opacity=0.8).add_to(layer_trafos)
                 folium.CircleMarker([t['hv_lat'], t['hv_lon']], radius=4, color='orange', fill=True, fill_opacity=1.0, popup=popup_html).add_to(layer_trafos)
 
-        # Loads
         if 'loads' in data:
             for l in data['loads']:
                 p_val = abs(l['p_mw'])
@@ -114,8 +114,7 @@ class Visualizer:
                 popup_html = f"<b>LOAD: {l['name']}</b><br>P: {l['p_mw']:.1f} MW<br>Q: {l['q_mvar']:.1f} MVar"
                 folium.CircleMarker([l['lat'], l['lon']], radius=radius, color='#e74c3c', fill=True, fill_opacity=0.6, popup=popup_html, tooltip=f"Load: {l['p_mw']:.0f} MW").add_to(layer_loads)
 
-        # Finalize
-        for l in [layer_grid_380, layer_grid_220, layer_loading, layer_gen, layer_loads, layer_trafos, layer_hvdc, layer_border, layer_disc, layer_inj]: l.add_to(m)
+        for l in [layer_grid_380, layer_grid_220, layer_loading, layer_gen, layer_storage, layer_loads, layer_trafos, layer_dc_lines, layer_border, layer_disc, layer_inj]: l.add_to(m)
         self._add_scenario_dashboard(m, scenario_info)
         self._add_unified_legend(m)
         folium.LayerControl(collapsed=True, position='topleft').add_to(m)
@@ -124,6 +123,46 @@ class Visualizer:
         save_path = os.path.join(config.OUTPUT_DIR, scenario_name_folder, f'{scenario_name_folder}_map.html')
         m.save(save_path)
         print(f"  ✓ Visualization saved to {save_path}")
+
+    def _add_storage_marker(self, s, layer):
+        """Adds specific storage markers (Small Circle Markers)."""
+        p_mw = s['p_mw']
+        avail_mw = s['available_mw']
+        
+        if p_mw > 0.001:
+            color = '#2ecc71' # Green (Discharging)
+            status = "DISCHARGING"
+        elif p_mw < -0.001:
+            color = '#e74c3c' # Red (Charging)
+            status = "CHARGING"
+        else:
+            color = '#95a5a6' # Grey (Idle)
+            status = "IDLE"
+
+        util = (abs(p_mw) / avail_mw * 100) if avail_mw > 0 else 0.0
+
+        html_content = f"""
+        <div style="font-family:sans-serif; font-size:12px; min-width:150px;">
+            <b style="color:{color};">BATTERY: {s['name']}</b>
+            <hr style="margin:4px 0;">
+            <b>Status:</b> {status}<br>
+            <b>Power:</b> {p_mw:+.1f} MW<br>
+            <b>Capacity:</b> {avail_mw:.1f} MW<br>
+            <b>Utilization:</b> {util:.1f}%
+        </div>
+        """
+        
+        folium.CircleMarker(
+            [s['lat'], s['lon']],
+            radius=4, 
+            color='#333',
+            weight=1,
+            fill=True,
+            fill_color=color,
+            fill_opacity=1.0,
+            tooltip=html_content, 
+            popup=folium.Popup(html_content, max_width=200)
+        ).add_to(layer)
 
     def _add_directional_arrow(self, obj, layer, is_slack=False):
         flow = obj.get('p_mw', 0)
@@ -179,22 +218,27 @@ class Visualizer:
                 except: pass
         if not coords: coords = [[line['from_lat'], line['from_lon']], [line['to_lat'], line['to_lon']]]
 
-        # [NEW] Calculate Capacity (MVA)
+        # Calculate Capacity (Accounting for Parallel Lines)
         i_max = line.get('max_i_ka', 0)
-        # S = sqrt(3) * V * I
-        capacity_mva = math.sqrt(3) * vn * i_max if i_max > 0 else 0
+        parallel = line.get('parallel', 1)  # [NEW] Read parallel count
         
-        # [NEW] Prepare Data for Tooltip
+        # Total Capacity = sqrt(3) * Voltage * Current * Parallel_Circuits
+        capacity_mva = math.sqrt(3) * vn * i_max * parallel if i_max > 0 else 0
+        
         flow_p = line.get('p_from_mw', 0)
         flow_q = line.get('q_from_mvar', 0)
         direction = f"{line.get('from_bus_id','?')} ➝ {line.get('to_bus_id','?')}" if flow_p > 0 else f"{line.get('to_bus_id','?')} ➝ {line.get('from_bus_id','?')}"
         load_pct = line['loading_percent']
         
-        # [NEW] Create Rich HTML Tooltip (Hover)
-        tooltip_html = f"""
+        # Format Capacity String (e.g., "1500 MVA (x2)")
+        cap_str = f"{capacity_mva:.0f} MVA"
+        if parallel > 1:
+            cap_str += f" (x{parallel})"
+
+        html_content = f"""
         <div style="font-family:sans-serif; font-size:12px; min-width:150px;">
             <b style="color:#2c3e50;">LINE: {line['name']}</b><br>
-            <span style="color:#7f8c8d;">{vn:.0f} kV | {capacity_mva:.0f} MVA</span>
+            <span style="color:#7f8c8d;">{vn:.0f} kV | {cap_str}</span>
             <hr style="margin:4px 0;">
             <b>Loading:</b> <span style="color:{'red' if load_pct>100 else 'green'}">{load_pct:.1f}%</span><br>
             <b>Flow P:</b> {abs(flow_p):.1f} MW<br>
@@ -213,18 +257,10 @@ class Visualizer:
             color = self.voltage_colors.get(vn, '#999')
             weight = 4 if vn >= 380 else 3
             
-        # Use 'tooltip' instead of 'popup' for hover effect
-        folium.PolyLine(coords, color=color, weight=weight, opacity=0.8, tooltip=tooltip_html).add_to(layer)
-
-    def _create_line_popup_html(self, line, vn):
-        status = "red" if line['loading_percent'] > 100 else "green"
-        return f"""<div style='font-family:sans-serif;font-size:12px;width:100%;'>
-        <div style='background:#34495e;color:white;padding:5px;'><b>LINE: {line['name']}</b> ({vn:.0f}kV)</div>
-        <table style='width:100%;margin-top:5px;'>
-        <tr><td>From/To</td><td style='text-align:right'>{line.get('from_bus_id','?')} → {line.get('to_bus_id','?')}</td></tr>
-        <tr><td>Loading</td><td style='text-align:right;color:{status};'><b>{line['loading_percent']:.1f}%</b></td></tr>
-        <tr><td>Flow</td><td style='text-align:right'>{line.get('p_from_mw',0):.1f} MW</td></tr>
-        </table></div>"""
+        folium.PolyLine(
+            coords, color=color, weight=weight, opacity=0.8, 
+            tooltip=html_content, popup=folium.Popup(html_content, max_width=200)
+        ).add_to(layer)
 
     def _create_bus_popup_html(self, bus):
         vm = bus['vm_pu']

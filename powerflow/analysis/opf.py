@@ -1,6 +1,6 @@
 """
 OPF - Manages scenario application, OPF cost/constraint setup, and power flow solving.
-(FIXED: Restored Q-Constraints and Slack Controllability from Original)
+ROBUST VERSION: Reverts rigid 'Must-Run' constraints to allow convergence under line limits.
 """
 import copy
 import pandas as pd
@@ -12,7 +12,9 @@ import sys
 from . import config
 from .scenarios import SCENARIOS
 
+# Filter warnings
 warnings.filterwarnings('ignore', message='.*numba.*')
+warnings.filterwarnings('ignore', category=FutureWarning, message='.*Downcasting.*')
 
 class OutputRedirector:
     """Context manager to capture stdout/stderr to a file."""
@@ -88,9 +90,12 @@ class OPFEngine:
         cfs = scenario_data.get('capacity_factors', {})
         load_scale = scenario_data.get('load_scale', 1.0)
         
+        # Get Storage Mode (default to bidirectional if missing)
+        storage_mode = scenario_data.get('storage_mode', 'bidirectional')
+        
         total_gen_breakdown = {}
 
-        # [RESTORED Logic] Apply CFs like original code
+        # Apply CFs
         def apply_cf_to_table(df, et_type):
             if len(df) == 0: return
             
@@ -103,8 +108,6 @@ class OPFEngine:
                 if str(df.at[idx, 'type']) == 'border': continue
 
                 # Determine Nameplate
-                # Original code used 'nameplate_p_mw' if available, let's stick to standard p_mw logic
-                # assuming base_net p_mw is the installed capacity.
                 install_cap = df.at[idx, 'max_p_mw']
                 if pd.isna(install_cap) or install_cap <= 0:
                     install_cap = df.at[idx, 'p_mw']
@@ -114,17 +117,33 @@ class OPFEngine:
                 
                 actual_p = install_cap * cf
                 
-                # Update P
+                # Update P value for display/init
                 df.at[idx, 'p_mw'] = actual_p
                 
-                # [RESTORED] Original P-Constraints logic
-                # Storage allows negative (charging), others 0 to actual
+                # --- Update Limits & Flexibility ---
                 if et_type == 'storage':
-                    df.at[idx, 'max_p_mw'] = actual_p
-                    df.at[idx, 'min_p_mw'] = -actual_p
+                    # STORAGE LOGIC based on MODE
+                    if storage_mode == 'charge_only':
+                        # Can only consume power (-Cap to 0)
+                        df.at[idx, 'max_p_mw'] = 0.0
+                        df.at[idx, 'min_p_mw'] = -actual_p
+                    
+                    elif storage_mode == 'discharge_only':
+                        # Can only generate power (0 to +Cap)
+                        df.at[idx, 'max_p_mw'] = actual_p
+                        df.at[idx, 'min_p_mw'] = 0.0
+                    
+                    else: # 'bidirectional' (default)
+                        # Can do both (-Cap to +Cap) to fix congestion
+                        df.at[idx, 'max_p_mw'] = actual_p
+                        df.at[idx, 'min_p_mw'] = -actual_p
+
                 else:
-                    df.at[idx, 'min_p_mw'] = 0.0
-                    df.at[idx, 'max_p_mw'] = actual_p 
+                    # GENERATOR LOGIC (Relaxed for Convergence):
+                    # Set max to available power (CF * Cap)
+                    df.at[idx, 'max_p_mw'] = actual_p
+                    # Set min to 50% of actual_p to allow flexibility
+                    df.at[idx, 'min_p_mw'] = 0.5 * actual_p 
 
                 # Track Stats
                 if gen_type not in total_gen_breakdown: total_gen_breakdown[gen_type] = 0
@@ -155,7 +174,6 @@ class OPFEngine:
     def _setup_opf_costs(self):
         """
         Sets up costs and constraints.
-        [CRITICAL FIX]: Restored the Q-Constraint setup block from the original code.
         """
         net = self.scenario_net
         scen = self.current_scenario_config
@@ -164,8 +182,7 @@ class OPFEngine:
         net.bus['min_vm_pu'] = config.BUS_MIN_VM_PU
         net.bus['max_vm_pu'] = config.BUS_MAX_VM_PU
         
-        # --- 2. [RESTORED] Q Constraints (CRITICAL FOR CONVERGENCE) ---
-        # Without this, generators cannot support voltage, causing OPF failure.
+        # --- 2. Q Constraints ---
         
         # A. Generators
         if len(net.gen) > 0:
@@ -174,26 +191,22 @@ class OPFEngine:
             
             for idx, gen in net.gen.iterrows():
                 if str(gen['type']) == 'border':
-                    # Borders usually have high capability
                     q_limit = gen['sn_mva'] * 0.6 if pd.notna(gen['sn_mva']) else 9999
                     net.gen.at[idx, 'min_q_mvar'] = -q_limit
                     net.gen.at[idx, 'max_q_mvar'] = q_limit
                 else:
-                    # Domestic Gens
                     sn = gen['sn_mva'] if pd.notna(gen['sn_mva']) else gen['p_mw'] / 0.9
                     net.gen.at[idx, 'min_q_mvar'] = sn * config.GEN_MIN_Q_RATIO * 0.8
                     net.gen.at[idx, 'max_q_mvar'] = sn * config.GEN_MAX_Q_RATIO
 
         # B. Static Generators
         if len(net.sgen) > 0:
-            # Sgens usually proportional to P
             net.sgen['min_q_mvar'] = net.sgen['p_mw'] * config.SGEN_MIN_Q_RATIO * 0.8
             net.sgen['max_q_mvar'] = net.sgen['p_mw'] * config.SGEN_MAX_Q_RATIO
             
         # C. Storage
         if len(net.storage) > 0:
             storage_q_ratio = 0.3
-            # Ensure sn_mva exists
             if 'sn_mva' not in net.storage.columns: net.storage['sn_mva'] = net.storage['p_mw']
             net.storage['min_q_mvar'] = -net.storage['sn_mva'] * storage_q_ratio
             net.storage['max_q_mvar'] = net.storage['sn_mva'] * storage_q_ratio
@@ -204,6 +217,9 @@ class OPFEngine:
 
         # --- 4. Cost Application (Dynamic from Scenario) ---
         
+        # Clear existing poly costs
+        net.poly_cost.drop(net.poly_cost.index, inplace=True)
+
         # Prepare Cost Dicts
         active_gen_costs = config.GENERATION_COSTS.copy()
         if 'generation_costs' in scen: active_gen_costs.update(scen['generation_costs'])
@@ -216,10 +232,12 @@ class OPFEngine:
         for et in ['gen', 'sgen', 'storage']:
             if len(net[et]) > 0:
                 for idx, element in net[et].iterrows():
+                    # [CRITICAL] Check if in_service to prevent IndexErrors
+                    if not element.get('in_service', True): continue
+
                     gen_type = str(element['type']).lower().strip()
                     
                     if gen_type == 'border':
-                        # Border logic
                         country = element['name'].replace('Border_', '')
                         params = active_import_costs.get('default', {'c1':0, 'c2':0.02})
                         for k, v in active_import_costs.items():
@@ -237,28 +255,28 @@ class OPFEngine:
                         cost = self._match_generation_cost(gen_type, active_gen_costs, default_cost_c1)
                         pp.create_poly_cost(net, element=idx, et=et, cp1_eur_per_mw=cost)
         
-        # DCLines
+        # DCLines Cost - [CRITICAL] Check in_service
         if len(net.dcline) > 0:
-            for idx in net.dcline.index:
-                pp.create_poly_cost(net, element=idx, et='dcline', cp1_eur_per_mw=1.0)
+            for idx, dcl in net.dcline.iterrows():
+                if dcl.get('in_service', True):
+                    pp.create_poly_cost(net, element=idx, et='dcline', cp1_eur_per_mw=1.0)
                 
-        # [RESTORED] Main Slack (External Grid) - Make it Controllable!
+        # Main Slack (External Grid) - Make it Controllable!
         net.ext_grid['controllable'] = True
-        slack_params = config.MAIN_SLACK_PARAMS # Use config params like original
-        # Or use a safe default if config missing
+        slack_params = config.MAIN_SLACK_PARAMS 
         c1_slack = slack_params.get('c1', 1000) if slack_params else 1000
         c2_slack = slack_params.get('c2', 0.1) if slack_params else 0.1
         
         for idx in net.ext_grid.index:
-            pp.create_poly_cost(net, element=idx, et='ext_grid', 
-                                cp0_eur=0, cp1_eur_per_mw=c1_slack, cp2_eur_per_mw2=c2_slack)     
+             if net.ext_grid.at[idx, 'in_service']:
+                pp.create_poly_cost(net, element=idx, et='ext_grid', 
+                                    cp0_eur=0, cp1_eur_per_mw=c1_slack, cp2_eur_per_mw2=c2_slack)     
 
     def _match_generation_cost(self, gen_type, cost_dict, default_val):
         gen_type_clean = gen_type.replace('_', ' ').replace('-', ' ')
         if gen_type in cost_dict: return cost_dict[gen_type]
         for key in cost_dict:
             if key in gen_type: return cost_dict[key]
-            # Try matching clean keys too
             key_clean = key.replace('_', ' ').replace('-', ' ')
             if key_clean in gen_type_clean or gen_type_clean in key_clean: return cost_dict[key]
         return default_val
@@ -266,7 +284,7 @@ class OPFEngine:
     def _solve_opf(self):
         net = self.scenario_net
         
-        # [RESTORED] Warm Start Logic
+        # Warm Start Logic
         print("--- WARM START: Calculating initial power flow (PF) ---")
         try:
             pp.runpp(net, algorithm='nr', max_iteration=20, numba=False)
@@ -276,10 +294,14 @@ class OPFEngine:
             print("  ⚠ PF initialization failed. Using FLAT start.")
             init_mode = 'flat'
 
-        # Cleanup
-        net.gen.fillna(0.0, inplace=True)
-        net.sgen.fillna(0.0, inplace=True)
-        if 'poly_cost' in net: net.poly_cost.fillna(0.0, inplace=True)
+        # [FIXED] Safe fillna for numeric columns only to prevent FutureWarning
+        for element in [net.gen, net.sgen]:
+            num_cols = element.select_dtypes(include=[np.number]).columns
+            element[num_cols] = element[num_cols].fillna(0.0)
+        
+        if 'poly_cost' in net:
+            p_cols = net.poly_cost.select_dtypes(include=[np.number]).columns
+            net.poly_cost[p_cols] = net.poly_cost[p_cols].fillna(0.0)
 
         try:
             print(f"--- OPF START (Solver: {config.OPF_SOLVER}) ---")

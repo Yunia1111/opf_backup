@@ -1,5 +1,6 @@
 """
 Configuration file for power flow calculation.
+FIXED: Enforce Line Limits to enable congestion management.
 """
 
 # ========== Network Constants ==========
@@ -81,7 +82,8 @@ IMPORT_COST_PARAMS = {
     'default':       {'c1': 0.0, 'c2': 0.02}
 }
 
-STORAGE_COST_PARAMS = {'c1': 0.0, 'c2': 0.02}
+# Storage: Low cost to encourage usage for flexibility
+STORAGE_COST_PARAMS = {'c1': 0.0, 'c2': 0.01}
 
 # 3. Domestic Generation Costs (Pure Linear c1)
 GENERATION_COSTS = {

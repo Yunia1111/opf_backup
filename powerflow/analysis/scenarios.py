@@ -40,7 +40,7 @@ SCENARIOS = {
     # SCENARIO 1: BASELINE (2025 Average) - USER UPDATED PRICES
     # -------------------------------------------------------------------------
     'average_of_2025': {
-        'name': '1. Average Of 2025 (Baseline)',
+        'name': '1. Average Of 2025',
         'description': 'Yearly average CFs. Standard balanced prices for 2025.',
         'capacity_factors': {
             'solar radiant energy': 0.08, 'wind_onshore': 0.18, 'wind_offshore': 0.46,
@@ -87,7 +87,7 @@ SCENARIOS = {
             'brown coal': 0.66,
             'petroleum products': 0.12,
             'other gases': 0.23,
-            'storage': 0.05,
+            'storage': 0.3,
             'pumped storage': 0.05,
         },
         'load_scale': 1.1, #55GW
@@ -129,7 +129,7 @@ SCENARIOS = {
             'brown coal': 0.17,
             'petroleum products': 0.00,
             'other gases': 0.00,
-            'storage': 0.05,
+            'storage': 0.3,
             'pumped storage': 0.05,
         },
         'load_scale': 1.16, #57.8GW
@@ -171,7 +171,7 @@ SCENARIOS = {
             'brown coal': 0.17,
             'petroleum products': 0.17,
             'other gases': 0.04,
-            'storage': 0.01,
+            'storage': 0.3,
             'pumped storage': 0.01,
         },
         'load_scale': 0.9, # originally 60GW, but here use less
@@ -213,7 +213,7 @@ SCENARIOS = {
             'brown coal': 0.38,
             'petroleum products': 0.17,
             'other gases': 0.04,
-            'storage': 0.07,
+            'storage': 0.3,
             'pumped storage': 0.07,
         },
         'load_scale': 1.15,
@@ -255,7 +255,7 @@ SCENARIOS = {
             'brown coal': 0.51,
             'petroleum products': 0.23,
             'other gases': 0.04,
-            'storage': 0.02,
+            'storage': 0.3,
             'pumped storage': 0.02,
         },
         'load_scale': 1.05,
@@ -297,7 +297,7 @@ SCENARIOS = {
             'brown coal': 0.36,
             'petroleum products': 0.23,
             'other gases': 0.04,
-            'storage': 0.09,
+            'storage': 0.3,
             'pumped storage': 0.09,
         },
         'load_scale': 1.04,
@@ -340,7 +340,7 @@ SCENARIOS = {
             'brown coal': 0.13,
             'petroleum products': 0.16,
             'other gases': 0.04,
-            'storage': 0.01,
+            'storage': 0.3,
             'pumped storage': 0.01,
         },
         'load_scale': 1.15,

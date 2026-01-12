@@ -1,7 +1,6 @@
 """
 Visualizer - Generates interactive folium maps of the power grid.
-MERGED VERSION: High-detail layers + Voltage Heatmap + Directional Arrows + Robust Coord Parsing.
-FIXED: Hover Tooltips for Lines with Detailed Data.
+FIXED: Added Storage Mode Selector (Bidirectional / Charge Only / Discharge Only).
 """
 import streamlit as st
 import pandas as pd
@@ -14,18 +13,17 @@ import altair as alt
 import glob
 
 # ==========================================
-# 1. 环境与路径设置
+# 1. Environment & Paths
 # ==========================================
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(os.path.dirname(current_dir))
 if project_root not in sys.path: sys.path.insert(0, project_root)
 
 from powerflow.analysis import config, grid_building, opf, visualization, report_export
-# [NEW] Explicitly import DEFAULT_GEN_COSTS to use as master list
 from powerflow.analysis.scenarios import SCENARIOS as PRESET_SCENARIOS, DEFAULT_GEN_COSTS
 
 # ==========================================
-# 2. 页面配置与 CSS
+# 2. Page Config & CSS
 # ==========================================
 st.set_page_config(page_title="German Grid OPF Studio", layout="wide", page_icon="⚡")
 st.markdown("""<style>
@@ -40,21 +38,14 @@ st.markdown("""<style>
 st.title("⚡ German Transmission Grid OPF Studio")
 
 # ==========================================
-# 3. 辅助函数：键名标准化
+# 3. Helpers
 # ==========================================
 def normalize_key(key):
-    """
-    Robust normalization:
-    1. Check string type
-    2. Lowercase
-    3. Strip spaces
-    4. Replace underscores with spaces (unify 'wind_onshore' and 'wind onshore')
-    """
     if not isinstance(key, str): return "other"
     return key.lower().strip().replace('_', ' ').replace('-', ' ')
 
 # ==========================================
-# 4. 初始化状态与电网加载
+# 4. Init State & Load Grid
 # ==========================================
 if 'scenario_storage' not in st.session_state:
     st.session_state['scenario_storage'] = copy.deepcopy(PRESET_SCENARIOS)
@@ -62,7 +53,6 @@ if 'scenario_storage' not in st.session_state:
 if 'selected_scenario_name' not in st.session_state:
     st.session_state['selected_scenario_name'] = 'average_of_2025'
 
-# [NEW] Clear Cache Functionality
 if st.sidebar.button("🔄 Force Rebuild Network Cache"):
     cache_path = os.path.join(config.OUTPUT_DIR, config.NETWORK_CACHE_FILE)
     if os.path.exists(cache_path):
@@ -79,7 +69,6 @@ if st.sidebar.button("🔄 Force Rebuild Network Cache"):
 @st.cache_resource
 def load_base_network_cached():
     modeler = grid_building.GridModeler()
-    # forcing cache rebuild if it was deleted just now
     base_net, ext_grids = modeler.create_base_network()
     
     neighbor_countries = set()
@@ -87,37 +76,28 @@ def load_base_network_cached():
         if eg.get('type') != 'main_slack' and 'country' in eg:
             neighbor_countries.add(eg['country'])
     
-    # [UPDATED] Pre-calculate installed capacity per type (Robust Keys)
     installed_cap = {}
-    
-    # Debug list to see what we actually found
     found_types_raw = set()
 
     for net_gen in [base_net.gen, base_net.sgen, base_net.storage]:
-        # Skip empty tables
         if net_gen.empty: continue
 
         has_max_p = 'max_p_mw' in net_gen.columns
         has_type = 'type' in net_gen.columns
-        has_name = 'name' in net_gen.columns # Fallback if type missing
+        has_name = 'name' in net_gen.columns 
         
         for _, row in net_gen.iterrows():
-            # 1. Identify Type
             raw_type = "unknown"
             if has_type and pd.notna(row['type']):
                 raw_type = str(row['type'])
             elif has_name:
-                # Fallback: try to guess from name if type is missing
                 raw_type = str(row['name']).split('_')[0]
             
             found_types_raw.add(raw_type)
 
-            # 2. Normalize
             t = normalize_key(raw_type)
-            
             if 'border' in t or 'ext' in t: continue
             
-            # 3. Identify Capacity
             cap = 0.0
             if has_max_p and pd.notna(row.get('max_p_mw')):
                 cap = row['max_p_mw']
@@ -136,19 +116,16 @@ except Exception as e:
     st.stop()
 
 # ==========================================
-# 5. 侧边栏：参数配置
+# 5. Sidebar: Config
 # ==========================================
 st.sidebar.header("🎛️ Scenario Configuration")
 
-# --- Debug Expander (To diagnose your issue) ---
 with st.sidebar.expander("🛠️ Debug: Data Inspection", expanded=False):
     st.write("keys in `installed_capacity_map` (Normalized):")
     st.json(installed_capacity_map)
     st.write("Raw types found in `net.gen/sgen`:")
     st.write(debug_found_types)
-    st.info("If the list above is empty or weird, your cache is stale. Click 'Force Rebuild' above.")
 
-# --- A. 场景选择 ---
 available_scenarios = list(st.session_state['scenario_storage'].keys())
 idx = available_scenarios.index('average_of_2025') if 'average_of_2025' in available_scenarios else 0
 
@@ -163,47 +140,32 @@ default_load_scale = current_scen_data.get('load_scale', 1.0)
 defaults_gen_costs = current_scen_data.get('generation_costs', config.GENERATION_COSTS)
 defaults_import_costs = current_scen_data.get('import_costs', config.IMPORT_COST_PARAMS)
 
-# --- B. 负荷设置 ---
 st.sidebar.subheader("1. Demand Settings")
 load_scale = st.sidebar.number_input("Global Load Scaling Factor", 0.5, 2.5, float(default_load_scale), 0.05)
 
-# --- C. 发电出力系数 (CF) ---
 st.sidebar.subheader("2. Generation Capacity Factors (CF)")
 
 with st.sidebar.expander("Show/Hide Generators", expanded=True):
-    # Use DEFAULT_GEN_COSTS as master list
     master_gen_types = [k for k in DEFAULT_GEN_COSTS.keys() if k != 'default']
-    
     user_cfs = {}
     for gen_type in master_gen_types:
         default_val = float(defaults_cf.get(gen_type, 0.0))
         
-        # [ROBUST LOOKUP STRATEGY]
-        # 1. Try Normalized Match (ignore case, ignore underscores vs spaces)
         lookup_key = normalize_key(gen_type)
         cap = installed_capacity_map.get(lookup_key, 0)
-        
-        # 2. Fallback: Try Exact Raw Match if normalization failed 
-        # (Only happens if normalization logic is buggy, but safety first)
         if cap == 0:
              cap = installed_capacity_map.get(gen_type, 0)
 
-        # Label
         label_base = gen_type.replace('_', ' ').title()
-        
-        # Slider
         val = st.slider(f"{label_base}", 0.0, 1.0, default_val, 0.01, key=f"sl_{gen_type}")
         user_cfs[gen_type] = val
         
-        # Feedback
         current_mw = val * cap
         if cap > 0:
             st.markdown(f"<div class='caption-text'>⚡ <b>{current_mw:,.0f} MW</b> / {cap:,.0f} MW (Installed)</div>", unsafe_allow_html=True)
         else:
-            # Show the key we tried to find to help you debug
             st.markdown(f"<div class='debug-text'>⚠️ No Cap (Looked for: '{lookup_key}')</div>", unsafe_allow_html=True)
 
-# --- D. 市场价格设置 ---
 st.sidebar.subheader("3. Market Prices / Costs (€/MWh)")
 
 with st.sidebar.expander("🏭 Domestic Generation Costs", expanded=False):
@@ -214,7 +176,6 @@ with st.sidebar.expander("🏭 Domestic Generation Costs", expanded=False):
         label = g_key.replace('_', ' ').title()
         user_gen_costs[g_key] = st.number_input(f"{label}", value=float(scen_cost), step=1.0, key=f"cost_{g_key}")
 
-# 邻国进口价格
 with st.sidebar.expander("🌍 Neighboring Import Prices", expanded=False):
     user_border_costs = {}
     for country in neighbor_list:
@@ -229,7 +190,23 @@ with st.sidebar.expander("🌍 Neighboring Import Prices", expanded=False):
             val_c2 = st.number_input(f"c2 (Quad)", value=float(scen_params.get('c2', 0.0)), step=0.001, format="%.3f", key=f"c2_{country}")
         user_border_costs[country] = {'c1': val_c1, 'c2': val_c2}
 
-# --- E. 保存新场景 ---
+# --- [NEW] Storage Control Section ---
+st.sidebar.subheader("4. 🔋 Storage Strategy")
+storage_mode_ui = st.sidebar.selectbox(
+    "Select Operating Mode",
+    ["Bidirectional (Flexible)", "Charge Only (Load)", "Discharge Only (Gen)"],
+    index=0,
+    help="Flexible: Can charge or discharge to fix congestion.\nCharge Only: Acts as load.\nDischarge Only: Acts as generator."
+)
+
+# Map UI selection to internal config key
+storage_mode_map = {
+    "Bidirectional (Flexible)": "bidirectional",
+    "Charge Only (Load)": "charge_only",
+    "Discharge Only (Gen)": "discharge_only"
+}
+selected_storage_mode = storage_mode_map[storage_mode_ui]
+
 st.sidebar.markdown("---")
 new_scen_name = st.sidebar.text_input("New Scenario Name", placeholder="e.g. High Cost Winter")
 if st.sidebar.button("Save Configuration"):
@@ -241,7 +218,8 @@ if st.sidebar.button("Save Configuration"):
             'capacity_factors': user_cfs, 
             'load_scale': load_scale,
             'generation_costs': user_gen_costs, 
-            'import_costs': user_border_costs
+            'import_costs': user_border_costs,
+            # (Note: Storage mode is typically a runtime setting, but could be saved here if desired)
         }
         st.session_state['scenario_storage'][safe_id] = new_entry
         st.success(f"Saved '{new_scen_name}'!")
@@ -249,7 +227,7 @@ if st.sidebar.button("Save Configuration"):
         st.rerun()
 
 # ==========================================
-# 6. 主界面逻辑
+# 6. Main Logic
 # ==========================================
 def show_results(kpi_data, map_html_path, folder_name):
     st.success(f"✅ Results Loaded for: **{kpi_data['scenario'].upper()}**")
@@ -268,6 +246,17 @@ def show_results(kpi_data, map_html_path, folder_name):
             st.components.v1.html(f.read(), height=700)
     else:
         st.warning(f"⚠️ Map file not found at: {map_html_path}")
+
+    # Storage Analysis Panel
+    s_kpi = kpi_data.get('storage_analysis', {})
+    if s_kpi and s_kpi.get('installed_capacity_mw', 0) > 0:
+        st.subheader("🔋 Storage Analysis")
+        s1, s2, s3, s4 = st.columns(4)
+        s1.metric("Installed Cap", f"{s_kpi['installed_capacity_mw']:,.0f} MW")
+        s2.metric("Available Cap", f"{s_kpi['available_capacity_mw']:,.0f} MW", help="Max capability considered in OPF")
+        s3.metric("Net Flow", f"{s_kpi['net_flow_mw']:,.0f} MW", help="+ Discharging / - Charging")
+        s4.metric("Status (Units)", f"{s_kpi['charging_units']} Chg / {s_kpi['discharging_units']} Disch")
+        st.divider()
 
     st.subheader("📊 Generation Analysis")
     c_bar, c_pie = st.columns([2, 1])
@@ -387,7 +376,8 @@ if run_btn:
         'capacity_factors': user_cfs, 
         'load_scale': load_scale,
         'generation_costs': user_gen_costs, 
-        'import_costs': user_border_costs
+        'import_costs': user_border_costs,
+        'storage_mode': selected_storage_mode  # [NEW] Pass this mode to OPF
     }
     from powerflow.analysis.scenarios import SCENARIOS
     SCENARIOS[folder_name] = run_scenario_config

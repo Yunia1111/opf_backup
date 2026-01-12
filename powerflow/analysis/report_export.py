@@ -1,7 +1,7 @@
 """
 Report Generator - Exports OPF results to CSV, JSON and TXT.
 MERGED VERSION: Original detailed exports + Dashboard KPI support.
-FIXED: Added line physical limits (max_i_ka) for visualization capacity calculation.
+FIXED: Added 'parallel' attribute to line export for correct capacity calculation.
 """
 import pandas as pd
 import os
@@ -21,13 +21,13 @@ class ReportGenerator:
         self.output_dir = os.path.join(config.OUTPUT_DIR, safe_name)
         os.makedirs(self.output_dir, exist_ok=True)
         
-        # 1. 导出详细 CSV 用于地图和分析
+        # 1. Export detailed CSVs
         self._export_bus_results()
         self._export_line_results()
         self._export_import_export_results()
         self._export_visualization_data()
         
-        # 2. 导出 KPI 和 Summary
+        # 2. Export KPI and Summary
         kpi_data = self._calculate_consistent_kpi(scenario_name)
         
         with open(os.path.join(self.output_dir, 'kpi.json'), 'w') as f:
@@ -39,7 +39,8 @@ class ReportGenerator:
 
     def _calculate_consistent_kpi(self, scenario_name):
         """
-        核心统计函数：确保 Total Gen = Sum(Mix)，且严格剔除进口。
+        Core statistics: Ensures Total Gen = Sum(Mix), excludes imports.
+        Adds detailed storage analysis.
         """
         total_load = self.net.res_load['p_mw'].sum() if len(self.net.res_load) > 0 else 0.0
         
@@ -48,18 +49,18 @@ class ReportGenerator:
         def process_source(element_type, res_table):
             if len(self.net[element_type]) == 0 or len(res_table) == 0: return
             
-            # 合并静态数据(type)和结果数据(p_mw)
+            # Merge static data and result data
             df = self.net[element_type].join(res_table[['p_mw']], rsuffix='_res')
             
             for idx, row in df.iterrows():
                 p_val = row.get('p_mw_res', row.get('p_mw', 0))
                 g_type = str(row.get('type', 'other')).lower()
                 
-                # 排除边境进口 (Border)
+                # Exclude border
                 if 'border' in g_type: 
                     continue
                 
-                # 只有正出力才算发电
+                # Only positive output counts as generation
                 if p_val > 0.001:
                     key = g_type
                     if element_type == 'ext_grid': key = 'balancing (slack)'
@@ -73,25 +74,52 @@ class ReportGenerator:
         
         total_gen = sum(gen_mix.values())
         
+        # --- Storage Analysis ---
+        storage_kpi = {
+            'installed_capacity_mw': 0.0,
+            'available_capacity_mw': 0.0,
+            'net_flow_mw': 0.0,
+            'charging_units': 0,
+            'discharging_units': 0
+        }
+        
+        if len(self.net.storage) > 0 and len(self.net.res_storage) > 0:
+            # 1. Total Installed (Nameplate)
+            if 'nameplate_p_mw' in self.net.storage.columns:
+                storage_kpi['installed_capacity_mw'] = float(self.net.storage['nameplate_p_mw'].sum())
+            else:
+                # Fallback to current limits if nameplate missing (unlikely if built by grid_building)
+                storage_kpi['installed_capacity_mw'] = float(self.net.storage['max_p_mw'].sum()) # Approximation
+
+            # 2. Available Capacity (After CF application)
+            # In opf.py, max_p_mw is set to Installed * CF
+            storage_kpi['available_capacity_mw'] = float(self.net.storage['max_p_mw'].sum())
+            
+            # 3. Net Flow
+            # +P = Discharge (Generation), -P = Charge (Load)
+            net_flow = self.net.res_storage['p_mw'].sum()
+            storage_kpi['net_flow_mw'] = float(net_flow)
+            
+            # 4. Units Count
+            storage_kpi['discharging_units'] = int((self.net.res_storage['p_mw'] > 0.001).sum())
+            storage_kpi['charging_units'] = int((self.net.res_storage['p_mw'] < -0.001).sum())
+
         return {
             'scenario': scenario_name,
             'total_load_mw': float(total_load),
             'total_gen_mw': float(total_gen),
             'total_cost_eur': float(self.net.res_cost) if hasattr(self.net, 'res_cost') else 0.0,
-            'gen_by_type': gen_mix 
+            'gen_by_type': gen_mix,
+            'storage_analysis': storage_kpi
         }
 
     def _export_summary_txt(self, scenario_name, kpi_data):
-        """生成人类可读的 TXT 报告"""
         filepath = os.path.join(self.output_dir, 'summary.txt')
         total_gen = kpi_data['total_gen_mw']
         gen_mix = kpi_data['gen_by_type']
         line_losses = self.net.res_line['pl_mw'].sum() if len(self.net.res_line) > 0 else 0
         
-        storage_charge = 0.0
-        if len(self.net.res_storage) > 0:
-            s_p = self.net.res_storage['p_mw']
-            storage_charge = abs(s_p[s_p < -0.001].sum())
+        s_kpi = kpi_data.get('storage_analysis', {})
 
         scen_config = SCENARIOS.get(scenario_name, {})
         cfs = scen_config.get('capacity_factors', {})
@@ -102,10 +130,14 @@ class ReportGenerator:
             f.write(f"Total Cost:      {kpi_data['total_cost_eur']:,.2f} EUR/h\n")
             f.write(f"Total Load:      {kpi_data['total_load_mw']:,.2f} MW\n")
             f.write(f"Total Generation:{total_gen:,.2f} MW\n")
-            if storage_charge > 0.1:
-                f.write(f"Storage Charge:  {storage_charge:,.2f} MW\n")
             f.write(f"Line Losses:     {line_losses:,.2f} MW\n\n")
             
+            f.write("STORAGE ANALYSIS\n")
+            f.write(f"  Installed Cap: {s_kpi.get('installed_capacity_mw',0):,.2f} MW\n")
+            f.write(f"  Available Cap: {s_kpi.get('available_capacity_mw',0):,.2f} MW (CF applied)\n")
+            f.write(f"  Net Flow:      {s_kpi.get('net_flow_mw',0):,.2f} MW (+Disch / -Charge)\n")
+            f.write(f"  Units Status:  {s_kpi.get('charging_units',0)} Charging / {s_kpi.get('discharging_units',0)} Discharging\n\n")
+
             f.write("GENERATION MIX (Domestic)\n" + "-" * 68 + "\n")
             f.write(f"{'Type':<25} | {'Config CF':<10} | {'Output (MW)':>15} | {'Share':>8}\n")
             f.write("-" * 68 + "\n")
@@ -130,6 +162,7 @@ class ReportGenerator:
         line_results['name'] = self.net.line['name']
         line_results['from_bus'] = self.net.line['from_bus']
         line_results['to_bus'] = self.net.line['to_bus']
+        line_results['parallel'] = self.net.line['parallel']
         line_results.to_csv(os.path.join(self.output_dir, 'line_results.csv'), index=False)
         
         if len(self.net.res_line) > 0:
@@ -146,7 +179,6 @@ class ReportGenerator:
         for idx, eg in self.net.ext_grid.iterrows():
             if len(self.net.res_ext_grid) > 0:
                 p_mw = self.net.res_ext_grid.at[idx, 'p_mw']
-                # +P = Import (Injection), -P = Export (Absorption)
                 direction = 'IMPORT' if p_mw > 0.001 else ('EXPORT' if p_mw < -0.001 else 'NEUTRAL')
                 if direction != 'NEUTRAL':
                     export_data.append({
@@ -184,7 +216,8 @@ class ReportGenerator:
         """Exports data for map visualization."""
         d = {
             'buses': [], 'lines': [], 'generators': [], 'loads': [], 
-            'external_grids': [], 'dclines': [], 'trafos': [], 'disconnected': []
+            'external_grids': [], 'dclines': [], 'trafos': [], 'disconnected': [],
+            'storage_units': [] 
         }
 
         get_geo = lambda i: self.net.bus.at[i, 'geo'] if self.net.bus.at[i, 'geo'] else None
@@ -197,7 +230,7 @@ class ReportGenerator:
                 va = float(self.net.res_bus.at[i, 'va_degree']) if len(self.net.res_bus) > 0 else 0.0
                 d['buses'].append({'id': i, 'name': b['name'], 'lat': geo[0], 'lon': geo[1], 'vn_kv': b['vn_kv'], 'vm_pu': vm, 'va_degree': va})   
         
-        # Lines (Added max_i_ka for capacity calc)
+        # Lines
         for i, l in self.net.line.iterrows():
             fgeo, tgeo = get_geo(l['from_bus']), get_geo(l['to_bus'])
             if fgeo and tgeo: 
@@ -210,7 +243,8 @@ class ReportGenerator:
                     'q_from_mvar': float(self.net.res_line.at[i, 'q_from_mvar']) if len(self.net.res_line) > 0 else 0.0,
                     'p_to_mw': float(self.net.res_line.at[i, 'p_to_mw']) if len(self.net.res_line) > 0 else 0.0,
                     'q_to_mvar': float(self.net.res_line.at[i, 'q_to_mvar']) if len(self.net.res_line) > 0 else 0.0,
-                    'max_i_ka': float(l.get('max_i_ka', 0.0)) # [NEW] Added for visualization capacity calc
+                    'max_i_ka': float(l.get('max_i_ka', 0.0)),
+                    'parallel': int(l.get('parallel', 1)) 
                 }
                 if 'geo_coords' in l and pd.notna(l['geo_coords']): l_data['geo_coords'] = l['geo_coords']
                 d['lines'].append(l_data)
@@ -220,8 +254,8 @@ class ReportGenerator:
             hv_geo, lv_geo = get_geo(t['hv_bus']), get_geo(t['lv_bus'])
             if hv_geo: d['trafos'].append({'id': i, 'name': t['name'], 'hv_lat': hv_geo[0], 'hv_lon': hv_geo[1], 'lv_lat': lv_geo[0], 'lv_lon': lv_geo[1], 'loading_percent': float(self.net.res_trafo.at[i, 'loading_percent']) if len(self.net.res_trafo) > 0 else 0.0})
         
-        # Generators
-        for et in ['gen', 'sgen', 'storage']:
+        # Generators (Split Gen/Sgen from Storage)
+        for et in ['gen', 'sgen']:
             if len(self.net[et]) > 0:
                 for i, g in self.net[et].iterrows():
                     geo = get_geo(g['bus'])
@@ -230,6 +264,20 @@ class ReportGenerator:
                         p_val = self.net[res_key].at[i, 'p_mw'] if len(self.net[res_key]) > 0 else 0.0
                         q_val = self.net[res_key].at[i, 'q_mvar'] if len(self.net[res_key]) > 0 else 0.0
                         d['generators'].append({'id': f"{et}_{i}", 'name': g['name'], 'lat': geo[0], 'lon': geo[1], 'type': g['type'], 'p_mw': float(p_val), 'q_mvar': float(q_val)})
+
+        # Storage Units
+        if len(self.net.storage) > 0:
+            for i, s in self.net.storage.iterrows():
+                geo = get_geo(s['bus'])
+                if geo:
+                    p_val = self.net.res_storage.at[i, 'p_mw'] if len(self.net.res_storage) > 0 else 0.0
+                    installed = s.get('nameplate_p_mw', s.get('max_p_mw', 0))
+                    available = s.get('max_p_mw', 0)
+                    d['storage_units'].append({
+                        'id': f"storage_{i}", 'name': s['name'], 'lat': geo[0], 'lon': geo[1], 
+                        'p_mw': float(p_val), 'installed_mw': float(installed), 
+                        'available_mw': float(available)
+                    })
 
         # Loads
         for i, l in self.net.load.iterrows():
@@ -244,7 +292,7 @@ class ReportGenerator:
                 q_val = self.net.res_ext_grid.at[i, 'q_mvar'] if len(self.net.res_ext_grid) > 0 else 0
                 d['external_grids'].append({'id': i, 'name': eg['name'], 'lat': geo[0], 'lon': geo[1], 'p_mw': float(p_val), 'q_mvar': float(q_val)})
 
-        # HVDC
+        # HVDC & DC Lines
         if len(self.net.dcline) > 0:
             for i, dc in self.net.dcline.iterrows():
                 fgeo, tgeo = get_geo(dc['from_bus']), get_geo(dc['to_bus'])
