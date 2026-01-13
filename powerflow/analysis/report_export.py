@@ -234,6 +234,8 @@ class ReportGenerator:
         for i, l in self.net.line.iterrows():
             fgeo, tgeo = get_geo(l['from_bus']), get_geo(l['to_bus'])
             if fgeo and tgeo: 
+                i_actual = float(self.net.res_line.at[i, 'i_ka']) if len(self.net.res_line) > 0 else 0.0
+            if fgeo and tgeo: 
                 l_data = {
                     'id': i, 'name': l['name'], 
                     'from_bus_id': int(l['from_bus']), 'to_bus_id': int(l['to_bus']),
@@ -243,6 +245,7 @@ class ReportGenerator:
                     'q_from_mvar': float(self.net.res_line.at[i, 'q_from_mvar']) if len(self.net.res_line) > 0 else 0.0,
                     'p_to_mw': float(self.net.res_line.at[i, 'p_to_mw']) if len(self.net.res_line) > 0 else 0.0,
                     'q_to_mvar': float(self.net.res_line.at[i, 'q_to_mvar']) if len(self.net.res_line) > 0 else 0.0,
+                    'i_ka': i_actual,
                     'max_i_ka': float(l.get('max_i_ka', 0.0)),
                     'parallel': int(l.get('parallel', 1)) 
                 }

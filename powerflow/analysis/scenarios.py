@@ -321,11 +321,11 @@ SCENARIOS = {
 
 
     # -------------------------------------------------------------------------
-    # SCENARIO 8: High Domes 20250729
+    # SCENARIO 8: High Domestic Generation 20250729
     # -------------------------------------------------------------------------
     'high_domes': {
-        'name': '8. High Domes Day',
-        'description': 'Hign solar, high wind',
+        'name': '8. High Domestic Generation Day',
+        'description': 'High solar, high wind from Germany, high import/export costs',
         'capacity_factors': {
             'solar radiant energy': 0.40,
             'wind_onshore': 0.20,
@@ -358,6 +358,48 @@ SCENARIOS = {
             'Austria':     {'c1': 100,  'c2': 0.01}, 
             'Switzerland': {'c1': 100,  'c2': 0.01}, 
             'Germany':     {'c1': 30,  'c2': 0.01},
+            'default':     {'c1': 40,  'c2': 0.01}
+        }
+    },
+
+    # -------------------------------------------------------------------------
+    # SCENARIO 9: Wind Storm 20260109
+    # -------------------------------------------------------------------------
+    'wind_storm': {
+        'name': '9. Wind Storm Day 2026',
+        'description': 'High wind, low solar, high import/export costs',
+        'capacity_factors': {
+            'solar radiant energy': 0.01,
+            'wind_onshore': 0.55,
+            'biomass': 0.47,
+            'wind_offshore': 0.79,
+            'water': 0.22,
+            'warmth': 0.04,
+            'non-biogenic waste': 0.05,
+            'hydrogen': 0.01,
+            'natural gas': 0.26,
+            'coal': 0.25,
+            'brown coal': 0.33,
+            'petroleum products': 0.23,
+            'other gases': 0.04,
+            'storage': 0.30,
+            'pumped storage': 0.30,
+        },
+        'load_scale': 1.31,
+        'generation_costs': DEFAULT_GEN_COSTS.copy(),
+        'import_costs': {
+            'Denmark':     {'c1': 78,   'c2': 0.01},  
+            'Sweden':      {'c1': 78,  'c2': 0.01}, 
+            'Norway':      {'c1': 81,  'c2': 0.01}, 
+            'Netherlands': {'c1': 82,  'c2': 0.01}, 
+            'Poland':      {'c1': 135,  'c2': 0.01},
+            'Belgium':     {'c1': 78,  'c2': 0.01},
+            'Luxembourg':  {'c1': 78,  'c2': 0.01},
+            'France':      {'c1': 70,  'c2': 0.01},
+            'Czechia':     {'c1': 116,  'c2': 0.01},
+            'Austria':     {'c1': 139,  'c2': 0.01}, 
+            'Switzerland': {'c1': 122,  'c2': 0.01}, 
+            'Germany':     {'c1': 78,  'c2': 0.01},
             'default':     {'c1': 40,  'c2': 0.01}
         }
     },

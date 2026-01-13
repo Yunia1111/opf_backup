@@ -25,7 +25,7 @@ from powerflow.analysis.scenarios import SCENARIOS as PRESET_SCENARIOS, DEFAULT_
 # ==========================================
 # 2. Page Config & CSS
 # ==========================================
-st.set_page_config(page_title="German Grid OPF Studio", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="German Grid OPF Scenario Dashboard", layout="wide", page_icon="⚡")
 st.markdown("""<style>
     div[data-testid="stVerticalBlock"] > div { margin-bottom: -0.5rem; }
     div.stNumberInput, div.stSlider { padding-bottom: 0rem; }
@@ -35,7 +35,7 @@ st.markdown("""<style>
     .debug-text { font-size: 0.75em; color: #d63031; font-family: monospace; }
 </style>""", unsafe_allow_html=True)
 
-st.title("⚡ German Transmission Grid OPF Studio")
+st.title("⚡ German Transmission Grid OPF Dashboard")
 
 # ==========================================
 # 3. Helpers

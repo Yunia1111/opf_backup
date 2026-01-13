@@ -1,7 +1,7 @@
 """
 Visualizer - Generates interactive folium maps of the power grid.
 FIXED: Correctly calculates total capacity for parallel lines.
-FIXED: Storage markers are now small CircleMarkers (radius=4).
+FIXED: Storage markers are now smaller
 """
 import folium
 from folium import plugins
@@ -218,34 +218,55 @@ class Visualizer:
                 except: pass
         if not coords: coords = [[line['from_lat'], line['from_lon']], [line['to_lat'], line['to_lon']]]
 
-        # Calculate Capacity (Accounting for Parallel Lines)
-        i_max = line.get('max_i_ka', 0)
-        parallel = line.get('parallel', 1)  # [NEW] Read parallel count
+        i_max = float(line.get('max_i_ka', 0))
+        i_actual = float(line.get('i_ka', 0.0)) 
+        parallel = int(line.get('parallel', 1))
         
         # Total Capacity = sqrt(3) * Voltage * Current * Parallel_Circuits
         capacity_mva = math.sqrt(3) * vn * i_max * parallel if i_max > 0 else 0
         
-        flow_p = line.get('p_from_mw', 0)
-        flow_q = line.get('q_from_mvar', 0)
-        direction = f"{line.get('from_bus_id','?')} ➝ {line.get('to_bus_id','?')}" if flow_p > 0 else f"{line.get('to_bus_id','?')} ➝ {line.get('from_bus_id','?')}"
-        load_pct = line['loading_percent']
+        flow_p = float(line.get('p_from_mw', 0))
+        flow_q = float(line.get('q_from_mvar', 0))
+        load_pct = float(line.get('loading_percent', 0))
         
-        # Format Capacity String (e.g., "1500 MVA (x2)")
-        cap_str = f"{capacity_mva:.0f} MVA"
-        if parallel > 1:
-            cap_str += f" (x{parallel})"
+        direction = f"{line.get('from_bus_id','?')} ➝ {line.get('to_bus_id','?')}" if flow_p > 0 else f"{line.get('to_bus_id','?')} ➝ {line.get('from_bus_id','?')}"
 
+        if parallel > 1:
+            i_rating_str = f"{i_max:.2f} kA (x{parallel})"
+        else:
+            i_rating_str = f"{i_max:.2f} kA"
+            
         html_content = f"""
-        <div style="font-family:sans-serif; font-size:12px; min-width:150px;">
+        <div style="font-family:sans-serif; font-size:12px; min-width:180px;">
             <b style="color:#2c3e50;">LINE: {line['name']}</b><br>
-            <span style="color:#7f8c8d;">{vn:.0f} kV | {cap_str}</span>
+            <span style="color:#7f8c8d;">{vn:.0f} kV | {capacity_mva:.0f} MVA (Total)</span>
             <hr style="margin:4px 0;">
+            
             <b>Loading:</b> <span style="color:{'red' if load_pct>100 else 'green'}">{load_pct:.1f}%</span><br>
+            <b>Current:</b> {i_actual:.2f} kA / {i_rating_str}<br>
+            
+            <hr style="margin:4px 0; border-top:1px dashed #ccc;">
+            
             <b>Flow P:</b> {abs(flow_p):.1f} MW<br>
             <b>Flow Q:</b> {abs(flow_q):.1f} MVar<br>
             <b>Dir:</b> {direction}
         </div>
         """
+
+        if is_loading:
+            color = self.loading_colors['normal']
+            if load_pct > 100: color = self.loading_colors['critical']
+            elif load_pct > 80: color = self.loading_colors['high']
+            elif load_pct > 60: color = self.loading_colors['elevated']
+            weight = 4 + (load_pct/40)
+        else:
+            color = self.voltage_colors.get(vn, '#999')
+            weight = 4 if vn >= 380 else 3
+            
+        folium.PolyLine(
+            coords, color=color, weight=weight, opacity=0.8, 
+            tooltip=html_content, popup=folium.Popup(html_content, max_width=200)
+        ).add_to(layer)
 
         if is_loading:
             color = self.loading_colors['normal']

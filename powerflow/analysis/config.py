@@ -79,7 +79,7 @@ IMPORT_COST_PARAMS = {
     'Switzerland':   {'c1': 0.0, 'c2': 0.05},
     
     # Standard Neighbors
-    'default':       {'c1': 0.0, 'c2': 0.02}
+    'default':       {'c1': 0.0, 'c2': 0.1}
 }
 
 # Storage: Low cost to encourage usage for flexibility
