@@ -221,7 +221,8 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 					continue
 			except ValueError:
 				print("\nNo commissioning year:", nep_item["properties"]['Commissioning Date'])
-				pass
+				comm_year = 9999
+				# TODO: better default. Asked Stefan.
 
 			# Otherwise, apply power increase
 			if "substation" in nep_elements:
@@ -247,6 +248,7 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 						'Name': nep_item["properties"]["Name"],
 						'Operator': nep_item["properties"]["Operator"],
 						'_Power': power_mva,
+						'_Comm_Year': comm_year,
 					}
 					for key, voltage in nep_item["properties"].items():
 						if key.startswith('Voltage_'):
@@ -289,6 +291,7 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 					str(cables),
 					nep_item["properties"]["Operator"],
 					nep_item["geometry"]["coordinates"],
+					comm_year=comm_year,
 					filter_f=voltageFilter
 				)
 

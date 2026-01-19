@@ -193,11 +193,12 @@ class Connection:
 		Voltages: {', '.join([f"{c.voltage // 1000}kV" for c in self.circuits])}<br>
 		Length: {int(self.length)}m<br>
 		Operator: {self.operator}<br>
+		Comm year: {self.comm_year}<br>
 		Start Node: {self.startNode}<br>
 		End Node: {self.endNode}<br>
 		"""
 
-	def __init__(self, way_id, type, voltages, capacities, ampacities, dlr, frequency, circuits, cables, operator, geometry, length=None, startNode=None, endNode=None, filter_f=None):
+	def __init__(self, way_id, type, voltages, capacities, ampacities, dlr, frequency, circuits, cables, operator, geometry, length=None, comm_year=None, startNode=None, endNode=None, filter_f=None):
 
 		self.type = type or ConnType.UNDEF
 
@@ -465,6 +466,8 @@ class Connection:
 
 		# Dataset is (lon,lat) for some reason, flip that
 		self.geometry = [(lat, lon) for lon, lat in geometry]
+
+		self.comm_year = comm_year
 
 		self.startNode = startNode
 		self.endNode = endNode

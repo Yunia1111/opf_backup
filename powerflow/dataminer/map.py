@@ -4,8 +4,11 @@
 
 import folium
 from folium.plugins import MeasureControl
+from datetime import datetime
 
 from .model import NodeType, ConnType
+
+current_year = datetime.today().year
 
 def create_map(nodes, connections, generators, filename, additional_points=[]):
 
@@ -18,7 +21,13 @@ def create_map(nodes, connections, generators, filename, additional_points=[]):
 
 		print(f"Node {i:>5}/{len(nodes)}", end='\r')
 
-		color = "purple" if node.type == NodeType.SUBSTATION else "blue"
+		if node.comm_year and (node.comm_year > current_year):
+			color = "green"
+		elif node.type == NodeType.SUBSTATION:
+			color = "purple"
+		else:
+			color = "blue"
+
 		rad = 8 if node.type == NodeType.SUBSTATION else 4
 
 		folium.CircleMarker(
@@ -72,8 +81,15 @@ def create_map(nodes, connections, generators, filename, additional_points=[]):
 		print(f"Conn {i:>5}/{len(connections)}", end='\r')
 
 		v = max([c.voltage for c in conn.circuits])
-		color = "red" if v > 200000 else "blue"
-		color = "orange" if conn.type in [ConnType.HVDC_LINE, ConnType.HVDC_CABLE] else color
+
+		if conn.comm_year and (conn.comm_year > current_year):
+			color = "green"
+		elif conn.type in [ConnType.HVDC_LINE, ConnType.HVDC_CABLE]:
+			color = "orange"
+		elif v > 200000:
+			color = "red"
+		else:
+			color = "blue"
 
 		# MAYBE: Thicken on Hover would be nice to see conn ends
 		# There only seems to be a built in option for this for GeoJSON

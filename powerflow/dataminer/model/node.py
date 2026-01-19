@@ -41,9 +41,10 @@ class Node:
 		<ul>
 		{''.join([f"<li>{load}</li>" for load in self.loads])}
 		</ul>
+		Comm year: {self.comm_year}<br>
 		"""
 
-	def __init__(self, way_id, coords, name=None, operator=None, conn_dict={}, filter_f=None):
+	def __init__(self, way_id, coords, name=None, operator=None, conn_dict={}, comm_year=None, filter_f=None):
 
 		self.type = NodeType.UNDEF
 
@@ -71,6 +72,8 @@ class Node:
 		self.loads = set()
 
 		self.region = None # NUTS id
+
+		self.comm_year = comm_year
 
 		if filter_f and not filter_f(self):
 			raise FilteredItem("Item is filtered by filter_f()")
@@ -195,6 +198,7 @@ class Substation(Node):
 			Coords(properties['Latitude'], properties['Longitude']),
 			properties['Name'],
 			properties['Operator'],
+			comm_year=properties.get('_Comm_Year'),
 			filter_f=filter_f,
 		)
 
