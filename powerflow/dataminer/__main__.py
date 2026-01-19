@@ -375,7 +375,7 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 	#	Node._all.values(),
 	#	Connection._all.values(),
 	#	[], #Generator._all.values(),
-	#	"Maps/debug_map_with_islands.html"
+	#	"maps/debug_map_with_islands.html"
 	#)
 
 	# Remove Islands

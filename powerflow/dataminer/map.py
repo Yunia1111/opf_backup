@@ -19,10 +19,11 @@ def create_map(nodes, connections, generators, filename, additional_points=[]):
 		print(f"Node {i:>5}/{len(nodes)}", end='\r')
 
 		color = "purple" if node.type == NodeType.SUBSTATION else "blue"
+		rad = 8 if node.type == NodeType.SUBSTATION else 4
 
 		folium.CircleMarker(
 			location=tuple(node.coords),
-			radius=6,
+			radius=rad,
 			color=color,
 			fill=True,
 			fill_color=color,
