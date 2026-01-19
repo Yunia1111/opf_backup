@@ -164,6 +164,11 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 						mva_new = num_systems * 380 * 2 # everything in EHV is being upgraded to 380kV 2kA basically. Stefan said this is fine.
 						mva_inc = mva_new - mva_base
 
+						# TODO: Find a better way to prevent this
+						if mva_inc < 0:
+							print('Negative increase, very unlikely!')
+							continue
+
 						for el in nep_elements:
 							added_cap_num[el] += 1
 							added_cap_sum_mva[el] += mva_inc
