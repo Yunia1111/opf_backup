@@ -170,6 +170,42 @@
      "max_i_ka_air": 1.95
    }
 
+  },
+
+  "300000": {
+
+    "Kabel-HVDC-320kV-2500m2-XLPE": {
+      "r_ohm_per_km": 0.008,
+      "x_ohm_per_km": 0.12,
+      "c_nf_per_km": 270.0,
+      "max_i_ka_ground": 1.8,
+      "max_i_ka_air": 2.0
+    }
+
+  },
+
+  "320000": {
+
+    "Kabel-HVDC-320kV-2500m2-XLPE": {
+      "r_ohm_per_km": 0.008,
+      "x_ohm_per_km": 0.12,
+      "c_nf_per_km": 270.0,
+      "max_i_ka_ground": 1.8,
+      "max_i_ka_air": 2.0
+    }
+
+  },
+
+  "525000": {
+
+    "Kabel-HVDC-525kV-2500m2-XLPE": {
+      "r_ohm_per_km": 0.008,
+      "x_ohm_per_km": 0.14,
+      "c_nf_per_km": 220.0,
+      "max_i_ka_ground": 2.0,
+      "max_i_ka_air": 2.4
+    }
+
   }
 
  }

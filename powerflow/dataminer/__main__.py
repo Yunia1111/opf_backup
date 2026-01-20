@@ -101,6 +101,8 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 		conn_counter = 0
 		found_conn_counter = 0
 
+		max_comm_year = 0
+
 		# === PASS 1 ===
 		# Calculated the average relative capacity increase
 		# To be used for the many entries that don't have an "Added Capacity" field
@@ -108,6 +110,10 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 		for ni, nep_item in enumerate(raw_nep_items):
 
 			print(f"NEP {ni:>5}/{len(raw_nep_items)}", end='\r')
+
+			cy = nep_item["properties"].get('Commissioning Date')
+			if cy and cy != "N/A" and int(cy) > max_comm_year:
+				max_comm_year = int(cy)
 
 			mva_base = 0
 
@@ -220,9 +226,8 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 					print("\nNot commissioned yet:", comm_year)
 					continue
 			except ValueError:
-				print("\nNo commissioning year:", nep_item["properties"]['Commissioning Date'])
-				comm_year = 9999
-				# TODO: better default. Asked Stefan.
+				#print("\nNo commissioning year:", nep_item["properties"]['Commissioning Date'], "using fallback:", max_comm_year)
+				comm_year = max_comm_year
 
 			# Otherwise, apply power increase
 			if "substation" in nep_elements:
@@ -273,7 +278,7 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 					voltages = [380000]
 
 				# QUESTION: Split power increase proportionately into voltages instead of equally?
-				capacities = {voltage*1000: (power_mva/len(voltages)) for voltage in voltages} # MVA
+				capacities = {voltage: (power_mva/len(voltages)) for voltage in voltages} # MVA
 
 				frequency = nep_item["properties"]["Frequency"]
 				circuits = len(voltages) # or more depending on capacity?

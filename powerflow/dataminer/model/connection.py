@@ -139,7 +139,12 @@ class Circuit:
 		self.dlr = None
 
 	def __repr__(self):
-		return f"{self.voltage//1000}kV {self.phases} phase, {self.cables} cables, {self.systems} systems, {self.capacity}MVA, {self.ampacity}A, DLR: {self.dlr}A, Wire:{self.wire_type.name}"
+		return f"""
+		{self.voltage//1000}kV {self.phases} phase<br>
+		{self.cables} cables, {self.systems} systems<br>
+		{self.capacity}MVA, {self.ampacity}A, DLR: {self.dlr}A<br>
+		Wire: {self.wire_type.name}
+		"""
 
 	def fallback_capacity(self):
 		if self.voltage > 300000:
@@ -453,8 +458,8 @@ class Connection:
 
 				if c.voltage == capacity_voltage:
 
-					c.capacity = capacity_per_system * c.systems
-					c.ampacity = ampacity_per_system * c.systems
+					c.capacity = round(capacity_per_system * c.systems, 3)
+					c.ampacity = round(ampacity_per_system * c.systems, 3)
 					c.dlr = (dlr_per_system[0] * c.systems, dlr_per_system[1] * c.systems)
 
 					c.wire_type = WireType(self.type, c.voltage, ampacity_per_system)
