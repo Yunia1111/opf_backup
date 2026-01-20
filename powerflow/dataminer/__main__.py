@@ -15,8 +15,16 @@ DEFAULT_SCENARIO = {
 	'location': None # {'lat': 0, 'lon': 0, 'r_km': 50}
 }
 
-# TODO: Should support exporting filtered variants of data
-# e.G. "Only this circular area" or "Only over 200kV"
+# TODO: CLI to adjust scenario
+
+# TODO: Look for disconnected buses using the analysis result maps
+# TODO: Also use collection `loads`
+
+# Next: 110kV:
+# - define 50km Radius in scenario
+# - Add all 110kV lines
+# - Define all 110kV+EHV substations as slack buses for the external transfer
+
 
 if len(sys.argv) >= 2 and sys.argv[1] == "--fetch-new-data":
 	db = DB()
@@ -78,6 +86,7 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 	print("\n\n   >>>   Base Import Complete   <<<   \n\n")
 
 	### NEP
+	# TODO: Move to its own file/module
 
 	include_nep = True
 	if include_nep:
