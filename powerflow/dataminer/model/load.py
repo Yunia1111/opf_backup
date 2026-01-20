@@ -35,10 +35,13 @@ class Load:
 	# TODO: Add loads from loads collection that aren't commisioned yet (big load additions)
 
 	@classmethod
-	def load_from_json(cls, filename):
+	def load_from_json(cls, filename, scenario=None):
 
 		with open(filename) as f:
 			raw_loads = json.load(f)
+
+		current_year = scenario['year'] if scenario else datetime.today().year
+		closest_year_to_scenario = 5 * round(current_year / 5)
 
 		for raw_load in raw_loads:
 
@@ -47,9 +50,8 @@ class Load:
 
 			nuts_id = raw_load['name_short']
 
-			year = raw_load['year']
-			current_year = 5 * round(datetime.now().year / 5)
-			if year != current_year:
+			# Only use the entries for the relevant year
+			if raw_load['year'] != closest_year_to_scenario:
 				continue
 
 			power = raw_load['statistics']['year']['overall']['mean']

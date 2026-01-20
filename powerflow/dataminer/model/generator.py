@@ -2,7 +2,6 @@ from . import *
 
 import geopandas
 from shapely.geometry import Point
-from datetime import datetime
 from collections import defaultdict
 
 class Generator:
@@ -24,17 +23,19 @@ class Generator:
 		Substation: {self.sub}<br>
 		"""
 
-	def __init__(self, gen_id, power, gen_type, sub_id=None, coords=None, comm_year=0, name=None):
+	def __init__(self, gen_id, power, gen_type, sub_id=None, coords=None, comm_year=None, name=None):
 
 		self.id = gen_id
 		self.coords = coords
 		self.power = power
 		self.type = gen_type
-		self.comm_year = comm_year
+		self.comm_year = int(comm_year)
 		self.name = name or gen_id
 
 		if sub_id:
 			self.sub = sub_id
+			if sub_id not in Substation._all:
+				raise DoesNotExistError("Generator references non-existing substation. Did you change scenario/filter? You probably need to re-run the data-prep step.")
 
 		elif coords:
 			closest_subs = Substation.search_closest(self.coords)
@@ -86,36 +87,19 @@ class Generator:
 				# strip newline and comma
 				raw_generator = json.loads(line.rstrip())
 
-				if raw_generator["UnitOperationalStatus"] == "in planning":
-					# NOTE: Skip future for now
-					continue
-
 				gen_type = raw_generator["EnergySource"]
 				if oceans_file and gen_type == "wind":
 					shp_point = Point(coords.lon, coords.lat)
 					in_water = ocean_gpd.contains(shp_point).any()
 					gen_type = "wind_offshore" if in_water else "wind_onshore"
 
-				comm_year = 0
 				if "CommissionDate" in raw_generator:
-					if isinstance(raw_generator["CommissionDate"]["$date"], str):
-						comm_year = int(raw_generator["CommissionDate"]["$date"][0:4])
-					elif isinstance(raw_generator["CommissionDate"]["$date"], dict):
-						try:
-							ms_timestamp = int(raw_generator["CommissionDate"]["$date"]["$numberLong"])
+					comm_year = util.MongoDBHelper.date_to_year(raw_generator["CommissionDate"])
 
-							# sanity checks for Windows
-							if ms_timestamp <= 0:
-								raise ValueError("non-positive timestamp")
-
-							# optional upper bound, year ~3000
-							if ms_timestamp > 32503680000000:
-								raise ValueError("timestamp too large")
-
-							comm_year = datetime.utcfromtimestamp(ms_timestamp / 1000).year
-
-						except (OSError, OverflowError, ValueError):
-							comm_year = 0
+				elif raw_generator["UnitOperationalStatus"] == "in planning":
+					update_year = util.MongoDBHelper.date_to_year(raw_generator["LastUpdate"])
+					# NOTE: Assume three years later. Stefans idea.
+					comm_year = update_year + 3
 
 				coords = Coords(raw_generator["Latitude"], raw_generator["Longitude"])
 
@@ -148,7 +132,7 @@ class Generator:
 			json.dump(aggregates, f, indent=2)
 
 	@classmethod
-	def load_from_json(cls, cachefilename, oceans_file=None):
+	def load_from_json(cls, cachefilename, oceans_file=None, scenario=None):
 
 		with open(cachefilename) as f:
 			substation_aggregates = json.load(f)
@@ -159,6 +143,9 @@ class Generator:
 
 				power_by_years = substation_aggregates[sub_id][gen_type]
 				for comm_year in power_by_years:
+
+					if scenario and int(comm_year) > scenario['year']:
+						continue
 
 					gen_id = f"gen_{sub_id}_{gen_type}_{comm_year}"
 

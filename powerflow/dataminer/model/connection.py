@@ -121,13 +121,14 @@ class WireType:
 
 class Circuit:
 
-	def __init__(self, voltage, frequency, phases, cables, wire_type):
+	def __init__(self, voltage, frequency, phases, cables, wire_type, comm_year=None):
 
 		self.voltage   	= voltage
 		self.frequency 	= frequency
 		self.phases    	= phases
 		self.cables    	= cables
 		self.wire_type  = wire_type
+		self.comm_year  = comm_year
 
 		if (cables % phases) != 0:
 			raise CablesPerPhaseError(f"Circuit: cable ({cables}) and phase ({phases}) count don't match.")
@@ -203,7 +204,7 @@ class Connection:
 		End Node: {self.endNode}<br>
 		"""
 
-	def __init__(self, way_id, type, voltages, capacities, ampacities, dlr, frequency, circuits, cables, operator, geometry, length=None, comm_year=None, startNode=None, endNode=None, filter_f=None):
+	def __init__(self, way_id, type, voltages, capacities, ampacities, dlr, frequency, circuits, cables, operator, geometry, length=None, comm_year=None, startNode=None, endNode=None, filter_f=None, interesting=False):
 
 		self.type = type or ConnType.UNDEF
 
@@ -215,7 +216,8 @@ class Connection:
 		# NOTE: Not sure if we we want to keep it this way but for now it's fine to use strings as IDs
 		self.id = str(self.id)
 
-		self.interesting = False
+		self.interesting = interesting
+		self.debug('id:', self.id)
 
 		if len(voltages) < 1:
 			raise NoVoltageError(f"No Voltages given, can't use conn {self.id}")
@@ -224,13 +226,6 @@ class Connection:
 		# standardized on only listing 3-phase grid voltages here.
 		# It's important for assigning voltages to circuits later.
 		voltages = [v for v in voltages if v != 15000]
-
-		#Currently not filtering unused voltages because it messes with the algorithm
-		for v in voltages:
-			if v not in [380000, 220000, 110000]:
-				#voltages.remove(v)
-				#self.interesting = True
-				self.debug(f"Unknown Voltage: {v}V")
 
 		if len(voltages) < 1:
 			raise NoVoltageError(f"No relevant voltages given")
@@ -318,6 +313,7 @@ class Connection:
 		remaining_circuits = num_circuits
 		vi = 0
 		fi = 0
+		num_filtered_circuits = 0
 
 		# maps circuit index to voltage index if multiple circuit counts are given
 		if len(circuits_list) > 1:
@@ -406,7 +402,7 @@ class Connection:
 
 				voltage = 15000
 
-			# cpp is "cables per phase"
+			# cpp is "cables per phase" aka number of systems
 			max_cpp_for_type = remaining_cables // phases
 			target_cpp = round(max_cpp_for_type / remaining_circuits)
 
@@ -424,17 +420,24 @@ class Connection:
 				f,
 				phases,
 				c_cables,
-				WireType(self.type, voltage)
+				WireType(self.type, voltage),
+				comm_year
 			)
 
 			if filter_f and filter_f(c):
 				self.circuits.append(c)
+			else:
+				num_filtered_circuits += 1
 
 			remaining_cables -= c_cables
 			remaining_circuits -= 1
 
 		if len(self.circuits) < 1:
-			raise NoValidCircuitError("No valid circuits found in this conn")
+
+			if num_filtered_circuits == num_circuits:
+				raise FilteredItem("Item is filtered by filter_f()")
+			else:
+				raise NoValidCircuitError("No valid circuits found in this conn")
 
 		for capacity_voltage, capacity in capacities.items():
 

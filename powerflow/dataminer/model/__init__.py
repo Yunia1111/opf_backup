@@ -37,6 +37,9 @@ class EndType(Enum):
 class FilteredItem(Exception):
 	pass
 
+class DoesNotExistError(Exception):
+	pass
+
 class NoVoltageError(ValueError):
 	pass
 

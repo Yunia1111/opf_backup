@@ -59,6 +59,7 @@ class DB:
 						projection = {
 							"_id": 1,
 							"UnitMastrNumber": 1,
+							"LastUpdate": 1,
 							"Name": 1,
 							"Latitude": 1,
 							"Longitude": 1,

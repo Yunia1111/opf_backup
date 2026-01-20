@@ -11,7 +11,8 @@ MAX_DISTANCE_SUBSTATION_M = 500
 
 DEFAULT_SCENARIO = {
 	'min_voltage': 200000,
-	'year': 2100,
+	'year': 2035,
+	'location': None # {'lat': 0, 'lon': 0, 'r_km': 50}
 }
 
 # TODO: Should support exporting filtered variants of data
@@ -48,29 +49,30 @@ if not os.path.exists(csv_dir):
 
 def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 
-	# TODO: Convert to general filter with:
-	# - comm_year
-	# - location
-	def voltageFilter(item):
+	# TODO: add location filter (coords+radius)
+	def scenarioFilter(item):
 
 		if item.max_v() < scenario['min_voltage']:
+			return False
+
+		if item.comm_year != None and item.comm_year > scenario['year']:
 			return False
 
 		return True
 
 	TransmissionLine.load_from_json(
 		datadir + "transmissionlines.json",
-		filter_f=voltageFilter
+		filter_f=scenarioFilter
 	)
 
 	TransmissionCable.load_from_json(
 		datadir + "transmissioncables.json",
-		filter_f=voltageFilter
+		filter_f=scenarioFilter
 	)
 
 	Substation.load_from_json(
 		datadir + "substations.json",
-		filter_f=voltageFilter
+		filter_f=scenarioFilter
 	)
 
 	print("\n\n   >>>   Base Import Complete   <<<   \n\n")
@@ -259,7 +261,10 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 						if key.startswith('Voltage_'):
 							sub_props[f"KV{int(voltage)//1000}"] = True
 
-					Substation(sub_props, filter_f=voltageFilter)
+					try:
+						Substation(sub_props, filter_f=scenarioFilter)
+					except FilteredItem as e:
+						continue
 
 			if "line" in nep_elements or "cable" in nep_elements:
 
@@ -284,21 +289,24 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 				circuits = len(voltages) # or more depending on capacity?
 				cables = circuits * (3 if frequency == '50' else 2)
 
-				Connection(
-					nep_item['_id']['$oid'], # Unfortunately no more stable ID available
-					ConnType.LINE if "line" in nep_elements else ConnType.CABLE,
-					voltages,
-					capacities,
-					{},
-					{},
-					frequency,
-					str(circuits),
-					str(cables),
-					nep_item["properties"]["Operator"],
-					nep_item["geometry"]["coordinates"],
-					comm_year=comm_year,
-					filter_f=voltageFilter
-				)
+				try:
+					Connection(
+						nep_item['_id']['$oid'], # Unfortunately no more stable ID available
+						ConnType.LINE if "line" in nep_elements else ConnType.CABLE,
+						voltages,
+						capacities,
+						{},
+						{},
+						frequency,
+						str(circuits),
+						str(cables),
+						nep_item["properties"]["Operator"],
+						nep_item["geometry"]["coordinates"],
+						comm_year=comm_year,
+						filter_f=scenarioFilter
+					)
+				except FilteredItem as e:
+					continue
 
 
 		print("NEP second pass done.")
@@ -495,7 +503,8 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 		return
 
 	Generator.load_from_json(
-		datadir + "generators_aggregate.json"
+		datadir + "generators_aggregate.json",
+		scenario=scenario
 	)
 
 	# NOTE: Closest sub is not always the correct one, but mostly
@@ -517,6 +526,7 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 
 	Load.load_from_json(
 		datadir + "load-analysis-counties.json",
+		scenario=scenario
 	)
 
 

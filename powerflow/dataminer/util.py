@@ -5,6 +5,7 @@ from pyproj import Geod
 
 import math
 import collections.abc
+from datetime import datetime
 
 class Geo():
 
@@ -115,3 +116,28 @@ class CSV:
 
 	def __exit__(self, type, value, traceback):
 		self.f.close()
+
+
+class MongoDBHelper:
+
+	@classmethod
+	def date_to_year(cls, mongo_date):
+
+		date = mongo_date["$date"]
+
+		if isinstance(date, str):
+			return int(date[0:4])
+
+		elif isinstance(date, dict):
+
+			ms_timestamp = int(date["$numberLong"])
+
+			# NOTE: Windows might not be able to do this. We'll see
+			#if ms_timestamp <= 0:
+			#	raise ValueError("non-positive timestamp")
+
+			# optional upper bound, year ~3000
+			if ms_timestamp > 32503680000000:
+				raise ValueError("timestamp too large")
+
+			return datetime.utcfromtimestamp(ms_timestamp / 1000).year
