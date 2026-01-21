@@ -233,7 +233,7 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 			try:
 				comm_year = int(nep_item["properties"]['Commissioning Date'])
 				if comm_year > scenario['year']:
-					print("\nNot commissioned yet:", comm_year)
+					#print("\nNot commissioned yet:", comm_year)
 					continue
 			except ValueError:
 				#print("\nNo commissioning year:", nep_item["properties"]['Commissioning Date'], "using fallback:", max_comm_year)

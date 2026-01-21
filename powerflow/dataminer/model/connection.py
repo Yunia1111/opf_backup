@@ -175,13 +175,15 @@ class Connection:
 
 	_deleted_conns = []
 
+	logfile = open('conn_debug_log.txt', 'w')
+
 	@classmethod
 	def get(cls, search_id):
 		return cls._all[str(search_id)]
 
 	def debug(self, *args, **kwargs):
 		if self.interesting:
-			print(*args, **kwargs)
+			print(*args, **kwargs, file=__class__.logfile)
 
 	def __repr__(self):
 		return f"{self.type} {self.id}, {len(self.circuits)} circuits, {int(self.length)}m, {self.operator}"
@@ -741,7 +743,7 @@ class TransmissionLine(Connection):
 				continue
 
 			except NoVoltageError as e:
-				print(e)
+				print(e, '(line)', file=cls.logfile)
 				continue
 
 			except PowerFrequencyError as e:
@@ -853,7 +855,7 @@ class TransmissionCable(Connection):
 				continue
 
 			except NoVoltageError as e:
-				print(e)
+				print(e, '(cable)', file=cls.logfile)
 				continue
 
 			except PowerFrequencyError as e:

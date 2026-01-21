@@ -2,6 +2,7 @@
 *.csv
 *.zip
 deleted_*.txt
+*log*
 maps/
 results/
 
