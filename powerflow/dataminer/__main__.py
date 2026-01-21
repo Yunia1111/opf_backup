@@ -11,11 +11,10 @@ MAX_DISTANCE_SUBSTATION_M = 500
 
 DEFAULT_SCENARIO = {
 	'min_voltage': 200000,
+	'max_voltage': float("inf"),
 	'year': 2035,
-	'location': None # {'lat': 0, 'lon': 0, 'r_km': 50}
+	'area': None # {'lat': 0, 'lon': 0, 'r_km': 50}
 }
-
-# TODO: CLI to adjust scenario
 
 # TODO: Look for disconnected buses using the analysis result maps
 # TODO: Also use collection `loads`

@@ -1,4 +1,4 @@
-def fetch_db():
+def fetch_db(scenario=None):
 
 	from .db import DB
 
@@ -14,12 +14,12 @@ def fetch_db():
 		"nep-hv"
 	])
 
-def prep():
+def prep(scenario=None):
 
 	from .__main__ import main
-	main(only_prep_gens=True)
+	main(scenario=scenario, only_prep_gens=True)
 
-def create_model():
+def create_model(scenario=None):
 
 	from .__main__ import main
-	main()
+	main(scenario=scenario)
