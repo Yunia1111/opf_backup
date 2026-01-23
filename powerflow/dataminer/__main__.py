@@ -17,7 +17,6 @@ DEFAULT_SCENARIO = {
 }
 
 # TODO: Look for disconnected buses using the analysis result maps
-# TODO: Also use collection `loads`
 
 # Next: 110kV:
 # - define 50km Radius in scenario
@@ -34,6 +33,7 @@ if len(sys.argv) >= 2 and sys.argv[1] == "--fetch-new-data":
 			"transmissionlines",
 			"generators",
 			"load-analysis-counties",
+			"loads",
 			"substation-grid-locations",
 			"nep-ehv",
 			"nep-hv"
@@ -521,12 +521,12 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 
 	Generator.write_csv(csv_dir + "generators.csv")
 
-	create_map(
-		Node._all.values(),
-		Connection._all.values(),
-		[], #Generator._all.values(),
-		"maps/debug_map.html"
-	)
+	#create_map(
+	#	Node._all.values(),
+	#	Connection._all.values(),
+	#	[], #Generator._all.values(),
+	#	"maps/debug_map.html"
+	#)
 
 
 
@@ -534,6 +534,7 @@ def main(scenario=DEFAULT_SCENARIO, only_prep_gens=False):
 
 	Load.load_from_json(
 		datadir + "load-analysis-counties.json",
+		datadir + "loads.json",
 		scenario=scenario
 	)
 

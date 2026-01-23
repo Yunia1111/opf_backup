@@ -123,6 +123,7 @@ if __name__ == "__main__":
 			"transmissioncables",
 			"transmissionlines",
 			"load-analysis-counties",
+			"loads",
 			"substation-grid-locations",
 			"nep-ehv",
 			"nep-hv"
