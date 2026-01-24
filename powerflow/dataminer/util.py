@@ -105,7 +105,7 @@ class CSV:
 
 	def __init__(self, filename, header_row=None, delim=';'):
 
-		self.f = open(filename, 'w+')
+		self.f = open(filename, 'w+', encoding="utf-8")
 		self.delim = delim
 
 		if header_row != None:
