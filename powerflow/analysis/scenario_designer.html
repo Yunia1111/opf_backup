@@ -3,394 +3,450 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generation Capacity Scenario Designer - Final Polished Version</title>
+    <title>Generation Scenario Designer - With Copy</title>
     <style>
-        /* 1. Global and Body Optimization */
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
-            margin: 15px;
-            background-color: #f4f7f9; 
-            color: #333; 
-            font-size: 14px; 
-        }
-        h1 { 
-            color: #004d99; 
-            border-bottom: 3px solid #004d99; 
-            padding-bottom: 8px; 
-            margin: 0 0 15px 0;
-            font-size: 1.6em;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; background-color: #f4f7f9; color: #333; font-size: 14px; }
+        h1 { color: #004d99; border-bottom: 3px solid #004d99; padding-bottom: 10px; margin-bottom: 20px; }
         
-        /* 2. Top Layout Optimization */
-        .top-controls { display: flex; gap: 20px; margin-bottom: 15px; }
-        .load-control, .balance-box { padding: 12px; border-radius: 6px; flex-grow: 1; min-width: 300px; }
+        /* Top Control Panel */
+        .top-controls { display: flex; gap: 20px; margin-bottom: 20px; }
+        .control-box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); flex: 1; border: 1px solid #e0e0e0; }
+        .control-box h3 { margin-top: 0; color: #0056b3; border-bottom: 1px solid #eee; padding-bottom: 8px; font-size: 1.1em; }
         
-        /* Load Control Panel */
-        .load-control { background-color: #e9f7ef; border: 1px solid #d4edda; }
-        .load-control h3 { margin: 0 0 8px 0; color: #007bff; font-size: 1.2em; }
-        .load-input-group { margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
-        .load-input-group p { margin: 0; }
-        .load-label { width: 150px; text-align: left; margin-right: 5px; }
-        .load-output-summary p { margin: 3px 0; display: flex; justify-content: space-between; }
-
-        /* Balance Summary Panel */
-        .balance-box { background-color: #fff3cd; border: 1px solid #ffeeba; }
-        .balance-box h3 { margin: 0 0 8px 0; color: #856404; font-size: 1.2em; }
-        .balance-box p { margin: 3px 0; }
-        .balance-box hr { margin: 8px 0; border-top: 1px solid #ddd; }
-        .balance-box .balance-value { font-size: 1.3em; font-weight: bold; }
-
-        /* 3. Table Styles */
-        table { width: 100%; border-collapse: collapse; margin-bottom: 10px; background-color: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid #ddd; }
-        th { background-color: #e0f0ff; color: #004d99; font-weight: bold; text-align: center; }
-        td:nth-child(1) { text-align: left; } 
+        .input-group { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .input-group label { font-weight: 500; }
         
-        /* Input Styles */
-        .input-cf { width: 45px; padding: 4px; text-align: right; border: 1px solid #ccc; border-radius: 3px; font-size: 0.9em; } 
-        .load-control .input-cf { width: 70px; }
+        /* Import Section (Split) */
+        .import-container { display: flex; gap: 20px; margin-bottom: 20px; }
+        .import-box { flex: 1; background: #e7f1ff; padding: 15px; border-radius: 8px; border: 1px solid #b8daff; }
+        .import-box h3 { margin-top: 0; color: #004085; font-size: 1.1em; margin-bottom: 5px; }
+        .import-box p { font-size: 0.85em; color: #555; margin-bottom: 10px; margin-top: 0; }
         
-        /* Total Row Styles */
-        .total-row td { font-weight: bold; background-color: #cce5ff; border-top: 2px solid #004d99; padding: 7px 8px; } 
-        .total-row td:last-child { font-weight: bold; } 
-
-        /* 4. Export Section Styles */
-        #exportSection { 
-            margin-top: 20px; 
-            padding: 15px; 
-            background-color: #f0f0f8; 
-            border: 1px solid #c9c9d4; 
-            border-radius: 6px;
-        }
-        #exportSection h3 { color: #5a5a7a; margin-top: 0; }
-        #scenarioDescription { padding: 4px; border: 1px solid #ccc; border-radius: 3px; }
-        #codeOutput { 
-            width: 100%; 
-            height: 250px; 
-            margin-top: 10px; 
-            border: 1px solid #ccc; 
-            font-family: monospace; 
-            font-size: 0.9em; 
-            padding: 10px; 
-            box-sizing: border-box;
-        }
-        .generate-button { 
-            padding: 8px 15px; 
-            background-color: #007bff; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            cursor: pointer;
-        }
-        .generate-button:hover { background-color: #0056b3; }
+        /* Table */
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-top: 20px; }
+        th { background: #e0f0ff; color: #004d99; padding: 10px; text-align: right; border-bottom: 2px solid #004d99; }
+        th:first-child { text-align: left; }
+        td { padding: 8px 10px; text-align: right; border-bottom: 1px solid #eee; }
+        td:first-child { text-align: left; font-weight: 500; }
+        
+        /* Inputs */
+        .input-cf { width: 70px; padding: 5px; text-align: right; border: 1px solid #ccc; border-radius: 4px; }
+        .input-mw { width: 100px; padding: 5px; text-align: right; border: 1px solid #8cc5ff; border-radius: 4px; color: #0056b3; font-weight: bold; }
+        .text-area-box { width: 100%; height: 60px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 12px; margin-bottom: 10px; box-sizing: border-box; }
+        
+        .total-row td { background: #e9ecef; font-weight: bold; border-top: 2px solid #ccc; }
+        
+        /* Export Section */
+        #exportSection { margin-top: 0px; margin-bottom: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #e0e0e0; }
+        #codeOutput { width: 100%; height: 500px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 13px; background: #f8f9fa; color: #212529; box-sizing: border-box; }
+        
+        /* Buttons */
+        .btn { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        .btn:hover { background: #0056b3; }
+        .btn-green { background: #28a745; }
+        .btn-green:hover { background: #218838; }
+        .btn-gray { background: #6c757d; }
+        .btn-gray:hover { background: #5a6268; }
+        
+        .positive { color: green; font-weight: bold; }
+        .negative { color: red; font-weight: bold; }
+        .zero { color: #999; }
+        
+        .status-msg { margin-left: 10px; font-size: 0.9em; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>⚡ Generation Capacity Scenario Designer (CF Analysis)</h1>
+    <h1>⚡ Generation Scenario Designer</h1>
     
     <div class="top-controls">
+        <div class="control-box">
+            <h3>Manual Load Settings</h3>
+            <div class="input-group">
+                <label>Base Load (MW):</label>
+                <input type="number" id="baseLoadInput" value="50074.00" step="10" oninput="calculate()" class="input-cf" style="width: 100px;">
+            </div>
+            <div class="input-group">
+                <label>Load Scale:</label>
+                <input type="number" id="loadScale" value="1.00" step="0.01" oninput="calculate()" class="input-cf" style="width: 100px;">
+            </div>
+        </div>
         
-        <div class="load-control">
-            <h3>Load and Output Control</h3>
-            
-            <div class="load-input-group">
-                <span class="load-label">Baseline Load (Base Load):</span>
-                <input type="number" id="baseLoadInput" value="50074.00" min="0" step="10" oninput="calculateScenario()" class="input-cf"> MW
-            </div>
-            
-            <div class="load-input-group">
-                <span class="load-label"><label for="loadScale">Load Scale:</label></span>
-                <input type="number" id="loadScale" value="1.00" min="0" step="0.01" oninput="calculateScenario()" class="input-cf">
-            </div>
-
-            <hr style="border-top: 1px solid #ccc; margin: 10px 0;">
-
-            <div class="load-output-summary">
-                <p>Sustainable Energy Output: <span id="sustainableOutput" class="zero">0.00%</span></p>
-                <p>Conventional Energy Output: <span id="conventionalOutput" class="zero">0.00%</span></p>
-            </div>
-        </div>
-
-        <div class="balance-box">
-            <h3>Current Supply-Demand Balance Summary (Summary)</h3>
-            <p>Scaled Load: <span id="scaledLoadDisplay" class="zero">0.00</span> MW</p>
-            <p>Total Generation: <span id="totalGenerationDisplay" class="zero">0.00</span> MW</p>
+        <div class="control-box">
+            <h3>Balance Summary</h3>
+            <div class="input-group"><label>Target Load:</label> <span id="dispLoad">0.00</span> MW</div>
+            <div class="input-group"><label>Total Gen:</label> <span id="dispGen">0.00</span> MW</div>
             <hr>
-            <p>Balance: <span id="balanceDisplay" class="balance-value zero">0.00</span> MW</p>
+            <div class="input-group"><label>Balance:</label> <span id="dispBalance">0.00</span> MW</div>
+        </div>
+    </div>
+    
+    <div class="import-container">
+        <div class="import-box">
+            <h3>1. Import Load Data</h3>
+            <p>Paste text like: <em>Total (grid load)37,422.95 MWh</em></p>
+            <textarea id="loadInputText" class="text-area-box" placeholder="Paste load data here..."></textarea>
+            <button class="btn btn-green" onclick="parseLoad()">Update Load Scale</button>
+            <span id="loadMsg" class="status-msg" style="color: green;"></span>
         </div>
 
+        <div class="import-box">
+            <h3>2. Import Generation Data</h3>
+            <p>Paste text like: <em>Renewable generation7,692 MWh...</em></p>
+            <textarea id="genInputText" class="text-area-box" placeholder="Paste generation data here..."></textarea>
+            <button class="btn btn-green" onclick="parseGeneration()">Update Generation CFs</button>
+            <span id="genMsg" class="status-msg" style="color: green;"></span>
+        </div>
+    </div>
+
+    <div id="exportSection">
+        <h3>3. Export Python Code</h3>
+        <p style="margin-bottom: 5px; font-weight: bold;">Paste Day-Ahead Prices Text:</p>
+        <textarea id="priceInput" class="text-area-box" style="height: 80px;" placeholder="Paste text like: Germany98.17 €/MWhDenmark 198.17 €/MWh..."></textarea>
+        
+        <div style="margin-top: 10px; margin-bottom: 10px;">
+            <button class="btn" onclick="generateCode()">Generate Code</button>
+            <button class="btn btn-gray" onclick="copyCode()">Copy Code</button>
+            <span id="copyMsg" class="status-msg" style="color: #28a745;"></span>
+        </div>
+        
+        <textarea id="codeOutput" readonly></textarea>
     </div>
 
     <table>
         <thead>
             <tr>
-                <th style="text-align: left;">Generation Type</th>
+                <th>Generation Type</th>
                 <th>Capacity (MVA)</th>
-                <th>Baseline CF (Editable)</th>
-                <th>Input CF (New Scenario)</th>
-                <th>Actual (MW) (New Scenario)</th>
-                <th>MW Change (vs Baseline)</th>
-                <th>Output Share (%)</th>
+                <th>Base CF</th>
+                <th>Input CF</th>
+                <th>Actual Output (MW)</th>
+                <th>Share</th>
             </tr>
         </thead>
-        <tbody id="scenarioTableBody">
-            </tbody>
-        <tfoot>
-            <tr class="total-row">
-                <td style="text-align: left;">Total</td>
-                <td id="totalCapacity"></td>
-                <td></td>
-                <td></td>
-                <td id="totalActualNew"></td>
-                <td id="totalMWChange"></td>
-                <td id="totalShare">100.00%</td>
+        <tbody id="tableBody"></tbody>
+        <tfoot class="total-row">
+            <tr>
+                <td>TOTAL</td>
+                <td id="totalCap">0.00</td>
+                <td>-</td>
+                <td>-</td>
+                <td id="totalAct">0.00</td>
+                <td>100%</td>
             </tr>
         </tfoot>
     </table>
 
-    <div id="exportSection">
-        <h3>📤 Export Current Scenario as Python Snippet</h3>
-        <div style="display: flex; gap: 20px; margin-bottom: 10px;">
-            <label>Scenario Name (Key): 
-                <input type="text" id="scenarioKey" value="my_new_scenario" class="input-cf" style="width: 150px;">
-            </label>
-            <label style="flex-grow: 1;">Description: 
-                <input type="text" id="scenarioDescription" value="A scenario generated from the designer." style="width: 90%;">
-            </label>
-        </div>
+<script>
+    // --- 1. DATA CONFIGURATION ---
+    
+    // HTML Display Order
+    const SCENARIO_DATA = [
+        { type: 'solar radiant energy', name: 'Solar Radiant Energy', cap: 105915.19, baseCF: 0.07 },
+        { type: 'wind_onshore', name: 'Wind Onshore', cap: 68498.49, baseCF: 0.20 },
+        { type: 'wind_offshore', name: 'Wind Offshore', cap: 6549.61, baseCF: 0.37 },
+        { type: 'water', name: 'Water (Hydro)', cap: 5416.20, baseCF: 0.37 },
+        { type: 'biomass', name: 'Biomass', cap: 9154.88, baseCF: 0.55 },
+        { type: 'warmth', name: 'Warmth', cap: 2317.14, baseCF: 0.19 },
+        { type: 'non-biogenic waste', name: 'Non-biogenic Waste', cap: 2202.25, baseCF: 0.34 },
+        { type: 'natural gas', name: 'Natural Gas (Fossil)', cap: 35765.69, baseCF: 0.15 },
+        { type: 'coal', name: 'Coal (Hard)', cap: 16392.36, baseCF: 0.35 },
+        { type: 'brown coal', name: 'Brown Coal (Lignite)', cap: 15895.57, baseCF: 0.45 },
+        { type: 'petroleum products', name: 'Petroleum Products', cap: 7694.70, baseCF: 0.12 },
+        { type: 'other gases', name: 'Other Gases', cap: 2624.83, baseCF: 0.10 },
+        { type: 'storage', name: 'Storage', cap: 20581.05, baseCF: 0.08 },
+        { type: 'hydrogen', name: 'Hydrogen', cap: 4.26, baseCF: 0.01 } 
+    ];
+
+    // Python Code Key Order
+    const CODE_ORDER_KEYS = [
+        'solar radiant energy',
+        'wind_onshore',
+        'biomass',
+        'wind_offshore',
+        'water',
+        'warmth',
+        'non-biogenic waste',
+        'hydrogen',
+        'natural gas',
+        'coal',
+        'brown coal',
+        'petroleum products',
+        'other gases',
+        'storage'
+    ];
+    
+    // Globals for Comments
+    let parsedRenewableTotal = "";
+    let parsedConventionalTotal = "";
+    let parsedLoadInfo = "";
+
+    // --- 2. CORE FUNCTIONS ---
+
+    function fmt(n) { return n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+    function initTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        let totalCap = 0;
+
+        SCENARIO_DATA.forEach((item, idx) => {
+            totalCap += item.cap;
+            const tr = document.createElement('tr');
+            const initMW = item.cap * item.baseCF;
+            
+            tr.innerHTML = `
+                <td>${item.name}</td>
+                <td>${fmt(item.cap)}</td>
+                <td><input type="number" id="baseCF_${idx}" class="input-cf" value="${item.baseCF.toFixed(2)}" step="0.01" disabled style="background:#f9f9f9; color:#999;"></td>
+                <td><input type="number" id="inCF_${idx}" class="input-cf" value="${item.baseCF.toFixed(4)}" step="0.0001" oninput="calcFromCF(${idx})"></td>
+                <td><input type="number" id="inMW_${idx}" class="input-mw" value="${initMW.toFixed(2)}" step="10" oninput="calcFromMW(${idx})"></td>
+                <td id="share_${idx}">0.00%</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        document.getElementById('totalCap').innerText = fmt(totalCap);
+        calculate();
+    }
+
+    function calcFromCF(idx) {
+        const item = SCENARIO_DATA[idx];
+        const cfVal = parseFloat(document.getElementById(`inCF_${idx}`).value) || 0;
+        const mwVal = item.cap * cfVal;
+        document.getElementById(`inMW_${idx}`).value = mwVal.toFixed(2);
+        calculate();
+    }
+
+    function calcFromMW(idx) {
+        const item = SCENARIO_DATA[idx];
+        const mwVal = parseFloat(document.getElementById(`inMW_${idx}`).value) || 0;
+        let cfVal = mwVal / item.cap;
+        if (cfVal > 1) cfVal = 1; 
+        if (cfVal < 0) cfVal = 0;
+        document.getElementById(`inCF_${idx}`).value = cfVal.toFixed(4);
+        calculate();
+    }
+
+    function calculate() {
+        let totalMW = 0;
+        const currentMWs = [];
+        SCENARIO_DATA.forEach((item, idx) => {
+            const mw = parseFloat(document.getElementById(`inMW_${idx}`).value) || 0;
+            currentMWs.push(mw);
+            totalMW += mw;
+        });
+
+        const safeTotal = totalMW || 1;
+        SCENARIO_DATA.forEach((_, idx) => {
+            const share = (currentMWs[idx] / safeTotal) * 100;
+            document.getElementById(`share_${idx}`).innerText = share.toFixed(2) + '%';
+        });
+
+        const baseLoad = parseFloat(document.getElementById('baseLoadInput').value) || 0;
+        const scale = parseFloat(document.getElementById('loadScale').value) || 0;
+        const targetLoad = baseLoad * scale;
+        const balance = totalMW - targetLoad;
+
+        document.getElementById('totalAct').innerText = fmt(totalMW);
+        document.getElementById('dispLoad').innerText = fmt(targetLoad);
+        document.getElementById('dispGen').innerText = fmt(totalMW);
         
-        <button onclick="generateCodeSnippet()" class="generate-button">Generate Code</button>
-        
-        <textarea id="codeOutput" readonly></textarea>
-    </div>
+        const balEl = document.getElementById('dispBalance');
+        balEl.innerText = (balance > 0 ? "+" : "") + fmt(balance);
+        balEl.className = balance > 0.1 ? 'positive' : (balance < -0.1 ? 'negative' : 'zero');
+    }
 
+    // --- 3. PARSERS (SPLIT) ---
 
-    <script>
-        // --- 1. Data Structure ---
-        const SCENARIO_DATA = [
-            // Category 1: Sustainable
-            { type: 'solar radiant energy', capacity: 105915.19, baselineCF: 0.07, category: 1 },
-            { type: 'wind_onshore', capacity: 68498.49, baselineCF: 0.20, category: 1 },
-            { type: 'biomass', capacity: 9154.88, baselineCF: 0.50, category: 1 },
-            { type: 'wind_offshore', capacity: 6549.61, baselineCF: 0.37, category: 1 },
-            { type: 'water', capacity: 5416.20, baselineCF: 0.37, category: 1 },
-            { type: 'warmth', capacity: 2317.14, baselineCF: 0.19, category: 1 },
-            { type: 'non-biogenic waste', capacity: 2202.25, baselineCF: 0.34, category: 1 },
-            { type: 'hydrogen', capacity: 4.26, baselineCF: 0.01, category: 1 },
-            // Category 2: Conventional
-            { type: 'natural gas', capacity: 35765.69, baselineCF: 0.15, category: 2 },
-            { type: 'coal', capacity: 16392.36, baselineCF: 0.35, category: 2 },
-            { type: 'brown coal', capacity: 15895.57, baselineCF: 0.45, category: 2 },
-            { type: 'petroleum products', capacity: 7694.70, baselineCF: 0.12, category: 2 },
-            { type: 'other gases', capacity: 2624.83, baselineCF: 0.10, category: 2 },
-            // Category 3: Storage
-            { type: 'storage', capacity: 20581.05, baselineCF: 0.00, category: 3 }
-        ].sort((a, b) => a.category - b.category);
-
-        let totalCapacityMVA = SCENARIO_DATA.reduce((sum, item) => sum + item.capacity, 0);
-
-
-        // --- 2. Core Functions ---
-
-        /** Formats number with two decimal places and thousand separators */
-        function formatNumber(num) {
-            if (num === null || num === undefined || isNaN(num)) return 'N/A';
-            return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // A. LOAD PARSER
+    function parseLoad() {
+        const text = document.getElementById('loadInputText').value;
+        if (!text) {
+            document.getElementById('loadMsg').innerText = "";
+            return;
         }
         
-        /** Formats number as percentage */
-        function formatPercentage(num) {
-            if (isNaN(num)) return '0.00%';
-            return num.toFixed(2) + '%';
+        const cleanText = text.replace(/[\r\n]+/g, ' '); 
+        const reLoad = /Total \(grid load\)\s*([\d,]+\.?\d*)/i;
+        const mLoad = cleanText.match(reLoad);
+        
+        if (mLoad) {
+            const loadMW = parseFloat(mLoad[1].replace(/,/g, ''));
+            const baseLoad = parseFloat(document.getElementById('baseLoadInput').value) || 50074;
+            const newScale = loadMW / baseLoad;
+            
+            // Update UI
+            document.getElementById('loadScale').value = newScale.toFixed(2);
+            parsedLoadInfo = `${mLoad[1]} MWh (Scale: ${newScale.toFixed(2)})`;
+            
+            calculate(); // Update balance
+            document.getElementById('loadMsg').innerText = "✓ Load Updated";
+        } else {
+            document.getElementById('loadMsg').innerText = "⚠ No match found";
+        }
+    }
+
+    // B. GENERATION PARSER
+    function parseGeneration() {
+        const text = document.getElementById('genInputText').value;
+        if (!text) {
+            document.getElementById('genMsg').innerText = "";
+            return;
         }
 
-        /** Gets CSS class for balance display */
-        function getBalanceClass(value) {
-            if (value > 0.01) return 'positive';
-            if (value < -0.01) return 'negative';
-            return 'zero';
-        }
+        // Reset Comments
+        parsedRenewableTotal = "";
+        parsedConventionalTotal = "";
         
-        /** Sanitizes CF value to be between 0.00 and 1.00 */
-        const sanitizeCF = (cf) => {
-            if (isNaN(cf) || cf < 0) return 0;
-            if (cf > 1.0) return 1.0;
-            return cf;
+        const cleanText = text.replace(/[\r\n]+/g, ' ');
+
+        const mapRules = {
+            'Biomass': 'biomass',
+            'Hydropower': 'water',
+            'Wind offshore': 'wind_offshore',
+            'Wind onshore': 'wind_onshore',
+            'Photovoltaics': 'solar radiant energy',
+            'Other renewable': 'warmth',
+            'Fossil brown coal': 'brown coal',
+            'Fossil hard coal': 'coal',
+            'Fossil gas': 'natural gas',
+            'Other conventional': 'petroleum products'
         };
 
+        // Capture Totals
+        const reRen = /Renewable generation\s*([\d,]+\.?\d*)/i;
+        const reConv = /Conventional generation\s*([\d,]+\.?\d*)/i;
+        
+        const mRen = cleanText.match(reRen);
+        if (mRen) parsedRenewableTotal = mRen[1] + " MWh";
+        const mConv = cleanText.match(reConv);
+        if (mConv) parsedConventionalTotal = mConv[1] + " MWh";
 
-        /** Renders the initial table structure */
-        function renderTable() {
-            const tbody = document.getElementById('scenarioTableBody');
-            tbody.innerHTML = '';
+        // Parse Items
+        const regex = /([a-zA-Z ]+?)\s*([\d,]+\.?\d*)\s*MWh/g;
+        let match;
+        let count = 0;
+        
+        while ((match = regex.exec(cleanText)) !== null) {
+            const rawName = match[1].trim();
+            // Skip load if accidentally pasted here
+            if (rawName.includes("Total") || rawName.includes("load")) continue;
+
+            const valMW = parseFloat(match[2].replace(/,/g, ''));
+            let targetType = mapRules[rawName];
             
-            SCENARIO_DATA.forEach((item, index) => {
-                const row = tbody.insertRow();
-                
-                row.insertCell().textContent = item.type;
-                row.insertCell().textContent = formatNumber(item.capacity);
-                
-                // 3. Baseline CF (Editable)
-                const baselineCFCell = row.insertCell();
-                baselineCFCell.innerHTML = `<input type="number" id="baselineCF-${index}" class="input-cf" 
-                                                    value="${item.baselineCF.toFixed(2)}" 
-                                                    min="0.00" max="1.00" step="0.01" 
-                                                    oninput="calculateScenario()">`;
-                
-                // 4. Input CF (New Scenario)
-                const newCFCell = row.insertCell();
-                newCFCell.innerHTML = `<input type="number" id="newCF-${index}" class="input-cf" 
-                                               value="${item.baselineCF.toFixed(2)}" 
-                                               min="0.00" max="1.00" step="0.01" 
-                                               oninput="calculateScenario()">`;
-                
-                // 5. Actual (MW) (New Scenario)
-                const newMWCell = row.insertCell();
-                newMWCell.id = `newMW-${index}`;
-                
-                // 6. MW Change (vs Baseline)
-                const changeMWCell = row.insertCell();
-                changeMWCell.id = `changeMW-${index}`;
-
-                // 7. Output Share (%)
-                const shareCell = row.insertCell();
-                shareCell.id = `share-${index}`;
-            });
-
-            document.getElementById('totalCapacity').textContent = formatNumber(totalCapacityMVA);
-        }
-
-        /** Reads inputs, performs all calculations, and updates the display */
-        function calculateScenario() {
-            let totalActualNew = 0;
-            let totalMWChange = 0;
-            let sustainableMW = 0; 
-            let conventionalMW = 0; 
-            
-            const actualMWs = []; 
-
-            // 1. Read editable load parameters
-            const loadScale = parseFloat(document.getElementById('loadScale').value) || 0;
-            const baseLoadValue = parseFloat(document.getElementById('baseLoadInput').value) || 0;
-            
-            SCENARIO_DATA.forEach((item, index) => {
-                // Read and sanitize CF inputs
-                const baselineCFInput = document.getElementById(`baselineCF-${index}`);
-                const newCFInput = document.getElementById(`newCF-${index}`);
-                
-                let currentBaselineCF = parseFloat(baselineCFInput.value);
-                let currentNewCF = parseFloat(newCFInput.value);
-
-                // Enforce CF bounds and update input fields
-                currentBaselineCF = sanitizeCF(currentBaselineCF);
-                baselineCFInput.value = currentBaselineCF.toFixed(2);
-                
-                currentNewCF = sanitizeCF(currentNewCF);
-                newCFInput.value = currentNewCF.toFixed(2);
-                
-                // 2. Key Calculations
-                const newBaselineMW = item.capacity * currentBaselineCF;
-                const newActualMW = item.capacity * currentNewCF;
-                const mwChange = newActualMW - newBaselineMW;
-                
-                actualMWs[index] = newActualMW; 
-                
-                // 3. Accumulate Totals
-                totalActualNew += newActualMW;
-                totalMWChange += mwChange;
-
-                // Accumulate by Energy Category
-                if (item.category === 1) { // Sustainable
-                    sustainableMW += newActualMW;
-                } else if (item.category === 2) { // Conventional
-                    conventionalMW += newActualMW;
+            if (targetType) {
+                const idx = SCENARIO_DATA.findIndex(i => i.type === targetType);
+                if (idx !== -1) {
+                    document.getElementById(`inMW_${idx}`).value = valMW.toFixed(2);
+                    calcFromMW(idx);
+                    count++;
                 }
-
-                // 4. Update Table Row (MW & MW Change)
-                document.getElementById(`newMW-${index}`).textContent = formatNumber(newActualMW);
-                const changeCell = document.getElementById(`changeMW-${index}`);
-                changeCell.textContent = formatNumber(mwChange);
-                changeCell.className = getBalanceClass(mwChange);
-            });
-
-            // 5. Second Pass: Calculate and update Output Share (%)
-            const totalNonZero = totalActualNew > 0 ? totalActualNew : 1; 
-            
-            SCENARIO_DATA.forEach((item, index) => {
-                const sharePct = (actualMWs[index] / totalNonZero) * 100;
-                document.getElementById(`share-${index}`).textContent = formatPercentage(sharePct);
-            });
-
-
-            // 6. Calculate and update Summary
-            const scaledLoad = baseLoadValue * loadScale;
-            const balance = totalActualNew - scaledLoad;
-            
-            const sustainablePct = (sustainableMW / totalNonZero) * 100;
-            const conventionalPct = (conventionalMW / totalNonZero) * 100;
-
-            // Update Summary displays
-            document.getElementById('totalActualNew').textContent = formatNumber(totalActualNew);
-            document.getElementById('totalMWChange').textContent = formatNumber(totalMWChange);
-            document.getElementById('scaledLoadDisplay').textContent = formatNumber(scaledLoad);
-            document.getElementById('totalGenerationDisplay').textContent = formatNumber(totalActualNew);
-            
-            // Update percentage displays
-            document.getElementById('sustainableOutput').textContent = formatPercentage(sustainablePct);
-            document.getElementById('conventionalOutput').textContent = formatPercentage(conventionalPct);
-            
-            const balanceDisplay = document.getElementById('balanceDisplay');
-            balanceDisplay.textContent = formatNumber(balance);
-            balanceDisplay.className = getBalanceClass(balance);
+            }
         }
         
-        /** Generates the Python code snippet for the current scenario */
-        function generateCodeSnippet() {
-            const key = document.getElementById('scenarioKey').value.trim().replace(/ /g, '_').toLowerCase() || 'my_new_scenario';
-            const description = document.getElementById('scenarioDescription').value.trim();
-            const loadScale = parseFloat(document.getElementById('loadScale').value).toFixed(2);
-            
-            let cf_dict_content = '';
-            
-            // 1. Collect current CFs from the table inputs
-            SCENARIO_DATA.forEach((item, index) => {
-                const input = document.getElementById(`newCF-${index}`);
-                const cf_value = parseFloat(input.value).toFixed(2);
-                
-                cf_dict_content += `            '${item.type}': ${cf_value},\n`;
-            });
-            
-            // 2. Add 'pumped storage' for structure consistency (using 'storage' CF as default)
-            const storageIndex = SCENARIO_DATA.findIndex(item => item.type === 'storage');
-            const storageCFInput = document.getElementById(`newCF-${storageIndex}`);
-            const pumpedStorageCF = storageCFInput ? parseFloat(storageCFInput.value).toFixed(2) : '0.08';
-            
-            cf_dict_content += `            'pumped storage': ${pumpedStorageCF},\n`;
-            
-            // 3. Construct the final dictionary string
-            const codeSnippet = `
-    '${key}': {
-        'name': '${key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}',
-        'description': '${description}',
-        'capacity_factors': {
-${cf_dict_content.trim()}
-        },
-        'load_scale': ${loadScale},
-    },
-    `.trim();
+        calculate();
+        document.getElementById('genMsg').innerText = `✓ Updated ${count} items`;
+    }
 
-            document.getElementById('codeOutput').value = codeSnippet;
-        }
+    // --- 4. PRICE PARSER & CODE GENERATOR & COPY ---
 
-
-        // 7. Page Initialization
-        window.onload = function() {
-            renderTable();
-            calculateScenario(); 
+    function parsePrices(text) {
+        if (!text) return {};
+        const map = {};
+        text = text.replace(/[\r\n]+/g, ' '); 
+        const parts = text.split('€/MWh');
+        
+        const keyMap = {
+            'Germany': 'Germany', 'Denmark': 'Denmark', 'France': 'France', 'Luxembourg': 'Luxembourg',
+            'Netherlands': 'Netherlands', 'Austria': 'Austria', 'Poland': 'Poland', 'Sweden': 'Sweden',
+            'Switzerland': 'Switzerland', 'Czech Republic': 'Czechia', 'Czechia': 'Czechia',
+            'Norway': 'Norway', 'Belgium': 'Belgium'
         };
 
-    </script>
+        parts.forEach(part => {
+            const cleanPart = part.trim();
+            if (!cleanPart) return;
+            const regex = /(.+?)\s*(\d+[.,]?\d*)$/;
+            const match = cleanPart.match(regex);
+            if (match) {
+                let rawName = match[1].trim(); 
+                let priceStr = match[2].replace(',', '.');
+                let price = parseFloat(priceStr);
+                for (const k in keyMap) {
+                    if (rawName.endsWith(k) || rawName === k || rawName.includes(k)) {
+                        map[keyMap[k]] = price;
+                    }
+                }
+            }
+        });
+        return map;
+    }
 
+    function generateCode() {
+        const getCF = (type) => {
+            const idx = SCENARIO_DATA.findIndex(i => i.type === type);
+            if (idx === -1) return '0.0000';
+            return parseFloat(document.getElementById(`inCF_${idx}`).value).toFixed(4);
+        };
+
+        const pv = parseFloat(getCF('solar radiant energy')).toFixed(2);
+        const w_on = parseFloat(getCF('wind_onshore')).toFixed(2);
+        const w_off = parseFloat(getCF('wind_offshore')).toFixed(2);
+        const load = parseFloat(document.getElementById('loadScale').value).toFixed(2);
+
+        // CF Dict
+        let cfLines = [];
+        CODE_ORDER_KEYS.forEach(key => {
+            const val = getCF(key);
+            cfLines.push(`        '${key}': ${val},`);
+        });
+        cfLines.push(`        'pumped storage': 0.0000,`);
+
+        // Price Dict
+        const pText = document.getElementById('priceInput').value;
+        const pMap = parsePrices(pText);
+        let pStr = "{}";
+        if (Object.keys(pMap).length > 0) {
+            let lines = [];
+            for (const c in pMap) {
+                lines.push(`        '${c}': {'c1': ${pMap[c]}, 'c2': 0.01},`);
+            }
+            pStr = "{\n" + lines.join("\n") + "\n    }";
+        }
+
+        // Add Comments
+        let comments = "";
+        if (parsedLoadInfo) comments += `    # Actual Load: ${parsedLoadInfo}\n`;
+        if (parsedRenewableTotal) comments += `    # Renewable generation: ${parsedRenewableTotal}\n`;
+        if (parsedConventionalTotal) comments += `    # Conventional generation: ${parsedConventionalTotal}\n`;
+
+        const output = `    pv=${pv}, w_on=${w_on}, w_off=${w_off}, load=${load},
+${comments}    cf_overrides={
+${cfLines.join('\n')}
+    },
+    price_template=PRICES_STD,
+    price_overrides=${pStr}`;
+
+        document.getElementById('codeOutput').value = output;
+    }
+
+    function copyCode() {
+        const copyText = document.getElementById("codeOutput");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); // For mobile devices
+        
+        navigator.clipboard.writeText(copyText.value).then(function() {
+            const msg = document.getElementById("copyMsg");
+            msg.innerText = "✓ Copied!";
+            setTimeout(() => { msg.innerText = ""; }, 2000);
+        }, function(err) {
+            console.error('Async: Could not copy text: ', err);
+        });
+    }
+
+    window.onload = initTable;
+
+</script>
 </body>
 </html>

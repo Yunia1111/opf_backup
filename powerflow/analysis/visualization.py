@@ -31,8 +31,8 @@ class Visualizer:
         else:
             scenario_name_folder = scenario_info['name'].replace(' ', '_').lower()
             
-        data_path = os.path.join(config.OUTPUT_DIR, scenario_name_folder, 'visualization_data.json')
-        
+        data_path = os.path.join(config.OUTPUT_DIR, scenario_name_folder, f'{scenario_name_folder}.json')
+               
         try:
             with open(data_path, 'r') as f: data = json.load(f)
         except FileNotFoundError: return

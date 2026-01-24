@@ -1,7 +1,9 @@
 """
 Report Generator - Exports OPF results to CSV, JSON and TXT.
 MERGED VERSION: Original detailed exports + Dashboard KPI support.
-FIXED: Added 'parallel' attribute to line export for correct capacity calculation.
+FIXED: 
+1. JSON output is now indented (pretty-printed).
+2. Added 'capacity_mva' calculation for lines (approx. max power).
 """
 import pandas as pd
 import os
@@ -25,13 +27,14 @@ class ReportGenerator:
         self._export_bus_results()
         self._export_line_results()
         self._export_import_export_results()
-        self._export_visualization_data()
+        self._export_visualization_data(scenario_name)
         
         # 2. Export KPI and Summary
         kpi_data = self._calculate_consistent_kpi(scenario_name)
         
+        # [FIXED] Indent JSON for readability
         with open(os.path.join(self.output_dir, 'kpi.json'), 'w') as f:
-            json.dump(kpi_data, f)
+            json.dump(kpi_data, f, indent=2)
             
         self._export_summary_txt(scenario_name, kpi_data)
         
@@ -212,7 +215,7 @@ class ReportGenerator:
             df.drop(columns=['abs_p'], inplace=True)
             df.to_csv(filepath_csv, index=False, float_format='%.2f')
 
-    def _export_visualization_data(self):
+    def _export_visualization_data(self, scenario_name):
         """Exports data for map visualization."""
         d = {
             'buses': [], 'lines': [], 'generators': [], 'loads': [], 
@@ -234,8 +237,15 @@ class ReportGenerator:
         for i, l in self.net.line.iterrows():
             fgeo, tgeo = get_geo(l['from_bus']), get_geo(l['to_bus'])
             if fgeo and tgeo: 
+                # [FIXED] Calculate MVA Capacity (Approx Max Power)
+                # Formula: sqrt(3) * V_n * I_max * parallel
+                vn_kv = self.net.bus.at[l['from_bus'], 'vn_kv']
+                max_i = float(l.get('max_i_ka', 0.0))
+                parallel = int(l.get('parallel', 1))
+                capacity_mva = np.sqrt(3) * vn_kv * max_i * parallel
+                
                 i_actual = float(self.net.res_line.at[i, 'i_ka']) if len(self.net.res_line) > 0 else 0.0
-            if fgeo and tgeo: 
+                
                 l_data = {
                     'id': i, 'name': l['name'], 
                     'from_bus_id': int(l['from_bus']), 'to_bus_id': int(l['to_bus']),
@@ -246,8 +256,9 @@ class ReportGenerator:
                     'p_to_mw': float(self.net.res_line.at[i, 'p_to_mw']) if len(self.net.res_line) > 0 else 0.0,
                     'q_to_mvar': float(self.net.res_line.at[i, 'q_to_mvar']) if len(self.net.res_line) > 0 else 0.0,
                     'i_ka': i_actual,
-                    'max_i_ka': float(l.get('max_i_ka', 0.0)),
-                    'parallel': int(l.get('parallel', 1)) 
+                    'max_i_ka': max_i,
+                    'capacity_mva': float(capacity_mva), # [ADDED]
+                    'parallel': parallel
                 }
                 if 'geo_coords' in l and pd.notna(l['geo_coords']): l_data['geo_coords'] = l['geo_coords']
                 d['lines'].append(l_data)
@@ -264,9 +275,27 @@ class ReportGenerator:
                     geo = get_geo(g['bus'])
                     if geo: 
                         res_key = f'res_{et}'
+                        # OPC actual output
                         p_val = self.net[res_key].at[i, 'p_mw'] if len(self.net[res_key]) > 0 else 0.0
                         q_val = self.net[res_key].at[i, 'q_mvar'] if len(self.net[res_key]) > 0 else 0.0
-                        d['generators'].append({'id': f"{et}_{i}", 'name': g['name'], 'lat': geo[0], 'lon': geo[1], 'type': g['type'], 'p_mw': float(p_val), 'q_mvar': float(q_val)})
+                        
+                        # Nameplate Capacity (Installed):
+                        installed = float(g.get('nameplate_p_mw', g.get('max_p_mw', 0)))
+                        
+                        # 2. Available: in opf.py  max_p_mw = Installed * CF
+                        available = float(g.get('max_p_mw', 0))
+
+                        d['generators'].append({
+                            'id': f"{et}_{i}", 
+                            'name': g['name'], 
+                            'lat': geo[0], 
+                            'lon': geo[1], 
+                            'type': g['type'], 
+                            'p_mw': float(p_val),       # OPF 实际出力
+                            'q_mvar': float(q_val),
+                            'installed_mw': installed,  # 安装容量
+                            'available_mw': available   # 可用容量
+                        })
 
         # Storage Units
         if len(self.net.storage) > 0:
@@ -310,5 +339,6 @@ class ReportGenerator:
                 with open(disc_cache_path, 'r') as f: d['disconnected'] = json.load(f)
             except: pass
 
-        with open(os.path.join(self.output_dir, 'visualization_data.json'), 'w') as f:
-            json.dump(d, f)
+        # [FIXED] Indent JSON here as well for the visualization file
+        with open(os.path.join(self.output_dir, f'{scenario_name}.json'), 'w') as f:
+            json.dump(d, f, indent=2)

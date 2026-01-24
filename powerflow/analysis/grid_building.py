@@ -10,6 +10,8 @@ import networkx as nx
 import os
 import pickle
 import json
+
+from pyparsing import line
 from . import config
 
 class GridModeler:
@@ -242,8 +244,13 @@ class GridModeler:
                     ext_grid_buses.add(bus_idx)
 
         # 3. Add Lines (AC and DC)
-        # [UPDATED] Check for DC lines in connections file
+        
         for _, line in self.connections.iterrows():
+            # remove the line on the sea with specific ID
+            if str(line.get('name', '')) == 'way/753560476':
+                print(f"  > Skipping specific line: {line['name']}")
+                continue
+
             from_bus = self.bus_mapping.get(line['from_bus_id'])
             to_bus = self.bus_mapping.get(line['to_bus_id'])
             

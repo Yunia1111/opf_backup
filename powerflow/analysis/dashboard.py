@@ -1,6 +1,6 @@
 """
 Visualizer - Generates interactive folium maps of the power grid.
-FIXED: Added Storage Mode Selector (Bidirectional / Charge Only / Discharge Only).
+FIXED: Added Batch Processing Mode (Run range of scenarios).
 """
 import streamlit as st
 import pandas as pd
@@ -11,6 +11,7 @@ import copy
 import json
 import altair as alt
 import glob
+import traceback # 用于捕获详细错误
 
 # ==========================================
 # 1. Environment & Paths
@@ -33,6 +34,8 @@ st.markdown("""<style>
     [data-testid="stDataFrame"] { width: 100%; }
     .caption-text { font-size: 0.85em; color: #555; margin-top: -10px; margin-bottom: 10px; }
     .debug-text { font-size: 0.75em; color: #d63031; font-family: monospace; }
+    .success-text { color: green; font-weight: bold; }
+    .fail-text { color: red; font-weight: bold; }
 </style>""", unsafe_allow_html=True)
 
 st.title("⚡ German Transmission Grid OPF Dashboard")
@@ -120,17 +123,11 @@ except Exception as e:
 # ==========================================
 st.sidebar.header("🎛️ Scenario Configuration")
 
-with st.sidebar.expander("🛠️ Debug: Data Inspection", expanded=False):
-    st.write("keys in `installed_capacity_map` (Normalized):")
-    st.json(installed_capacity_map)
-    st.write("Raw types found in `net.gen/sgen`:")
-    st.write(debug_found_types)
-
 available_scenarios = list(st.session_state['scenario_storage'].keys())
 idx = available_scenarios.index('average_of_2025') if 'average_of_2025' in available_scenarios else 0
 
 selected_scen_key = st.sidebar.selectbox(
-    "Select Scenario", options=available_scenarios, index=idx,
+    "Select Scenario (Single Run)", options=available_scenarios, index=idx,
     format_func=lambda x: st.session_state['scenario_storage'][x]['name']
 )
 
@@ -163,8 +160,6 @@ with st.sidebar.expander("Show/Hide Generators", expanded=True):
         current_mw = val * cap
         if cap > 0:
             st.markdown(f"<div class='caption-text'>⚡ <b>{current_mw:,.0f} MW</b> / {cap:,.0f} MW (Installed)</div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"<div class='debug-text'>⚠️ No Cap (Looked for: '{lookup_key}')</div>", unsafe_allow_html=True)
 
 st.sidebar.subheader("3. Market Prices / Costs (€/MWh)")
 
@@ -190,7 +185,6 @@ with st.sidebar.expander("🌍 Neighboring Import Prices", expanded=False):
             val_c2 = st.number_input(f"c2 (Quad)", value=float(scen_params.get('c2', 0.0)), step=0.001, format="%.3f", key=f"c2_{country}")
         user_border_costs[country] = {'c1': val_c1, 'c2': val_c2}
 
-# --- [NEW] Storage Control Section ---
 st.sidebar.subheader("4. 🔋 Storage Strategy")
 storage_mode_ui = st.sidebar.selectbox(
     "Select Operating Mode",
@@ -198,8 +192,6 @@ storage_mode_ui = st.sidebar.selectbox(
     index=0,
     help="Flexible: Can charge or discharge to fix congestion.\nCharge Only: Acts as load.\nDischarge Only: Acts as generator."
 )
-
-# Map UI selection to internal config key
 storage_mode_map = {
     "Bidirectional (Flexible)": "bidirectional",
     "Charge Only (Load)": "charge_only",
@@ -219,7 +211,7 @@ if st.sidebar.button("Save Configuration"):
             'load_scale': load_scale,
             'generation_costs': user_gen_costs, 
             'import_costs': user_border_costs,
-            # (Note: Storage mode is typically a runtime setting, but could be saved here if desired)
+            'storage_mode': selected_storage_mode
         }
         st.session_state['scenario_storage'][safe_id] = new_entry
         st.success(f"Saved '{new_scen_name}'!")
@@ -227,7 +219,22 @@ if st.sidebar.button("Save Configuration"):
         st.rerun()
 
 # ==========================================
-# 6. Main Logic
+# 6. BATCH PROCESSING (NEW SECTION)
+# ==========================================
+st.sidebar.markdown("---")
+st.sidebar.header("🚀 Batch Processing")
+st.sidebar.info(f"Total Scenarios: {len(available_scenarios)}")
+
+batch_col1, batch_col2 = st.sidebar.columns(2)
+with batch_col1:
+    start_idx = st.number_input("Start Index", min_value=0, max_value=len(available_scenarios)-1, value=0)
+with batch_col2:
+    end_idx = st.number_input("End Index", min_value=0, max_value=len(available_scenarios)-1, value=min(len(available_scenarios)-1, 1))
+
+batch_run_btn = st.sidebar.button("▶️ Run Batch Sequence", type="primary")
+
+# ==========================================
+# 7. Helper: Show Results
 # ==========================================
 def show_results(kpi_data, map_html_path, folder_name):
     st.success(f"✅ Results Loaded for: **{kpi_data['scenario'].upper()}**")
@@ -253,8 +260,8 @@ def show_results(kpi_data, map_html_path, folder_name):
         st.subheader("🔋 Storage Analysis")
         s1, s2, s3, s4 = st.columns(4)
         s1.metric("Installed Cap", f"{s_kpi['installed_capacity_mw']:,.0f} MW")
-        s2.metric("Available Cap", f"{s_kpi['available_capacity_mw']:,.0f} MW", help="Max capability considered in OPF")
-        s3.metric("Net Flow", f"{s_kpi['net_flow_mw']:,.0f} MW", help="+ Discharging / - Charging")
+        s2.metric("Available Cap", f"{s_kpi['available_capacity_mw']:,.0f} MW")
+        s3.metric("Net Flow", f"{s_kpi['net_flow_mw']:,.0f} MW")
         s4.metric("Status (Units)", f"{s_kpi['charging_units']} Chg / {s_kpi['discharging_units']} Disch")
         st.divider()
 
@@ -298,116 +305,146 @@ def show_results(kpi_data, map_html_path, folder_name):
             )
             st.altair_chart((pie + text).properties(height=350), use_container_width=True)
 
-    st.subheader("🌍 Cross-Border & Balancing Details")
-    border_csv = os.path.join(config.OUTPUT_DIR, folder_name, 'import_export_results.csv')
-    
-    if os.path.exists(border_csv):
-        try:
-            df_border = pd.read_csv(border_csv)
-            df_border['name'] = df_border['name'].astype(str)
-            
-            def extract_category(name):
-                if "Slack" in name or "ExtGrid" in name: return "⚡ Balancing (Slack)"
-                for country in neighbor_list:
-                    if country in name: return country
-                return "Other"
-
-            df_border['Category'] = df_border['name'].apply(extract_category)
-            group_sum = df_border.groupby('Category')['p_mw'].sum().reset_index()
-            group_sum.rename(columns={'p_mw': 'Net_MW'}, inplace=True)
-            df_merged = df_border.merge(group_sum, on='Category')
-            df_merged['is_slack'] = df_merged['Category'].apply(lambda x: 0 if "Balancing" in x else 1)
-            df_merged['abs_net'] = df_merged['Net_MW'].abs()
-            df_merged.sort_values(by=['is_slack', 'abs_net', 'p_mw'], ascending=[True, False, False], inplace=True)
-            
-            final_data = []
-            for cat in df_merged['Category'].unique():
-                subset = df_merged[df_merged['Category'] == cat]
-                net = subset['Net_MW'].iloc[0]
-                d_net = "IMPORT" if net > 0.001 else ("EXPORT" if net < -0.001 else "NEUTRAL")
-                final_data.append({'Region': cat, 'Connection': f"📊 TOTAL ({d_net})", 'Flow (MW)': abs(net), 'Status': d_net})
-                
-                name_counter = {}
-                for _, row in subset.iterrows():
-                    bn = row['name']
-                    if bn in name_counter: name_counter[bn] += 1; disp = f"{bn} ({name_counter[bn]})"
-                    else: name_counter[bn] = 1; disp = bn
-                    d_row = "IMPORT" if row['p_mw'] > 0.001 else ("EXPORT" if row['p_mw'] < -0.001 else "NEUTRAL")
-                    final_data.append({'Region': cat, 'Connection': f"  └─ {disp}", 'Flow (MW)': abs(row['p_mw']), 'Status': d_row})
-            
-            df_disp = pd.DataFrame(final_data)
-            if df_disp.duplicated(subset=['Region', 'Connection']).any():
-                df_disp['Connection'] = df_disp['Connection'] + " #" + df_disp.index.astype(str)
-            df_disp.set_index(['Region', 'Connection'], inplace=True)
-            
-            def style_row(row):
-                col = "#d4efdf" if row['Status'] == "IMPORT" else "#d6eaf8"
-                if "TOTAL" in row.name[1]: return [f'background-color: {col}; font-weight: bold'] * len(row)
-                return [''] * len(row)
-
-            st.dataframe(df_disp.style.apply(style_row, axis=1).format({'Flow (MW)': '{:,.1f}'}), use_container_width=True)
-        except Exception as e: st.error(f"Error displaying border table: {e}")
-    else: st.info("No detailed border data.")
-
 # ------------------------------------------
-# Main Execution
+# Main Execution Logic
 # ------------------------------------------
-folder_name = selected_scen_key.lower().replace(" ", "_")
-result_dir = os.path.join(config.OUTPUT_DIR, folder_name)
-existing_kpi_path = os.path.join(result_dir, 'kpi.json')
-existing_map_path = os.path.join(result_dir, f'{folder_name}_map.html')
-has_existing_data = os.path.exists(existing_kpi_path)
 
-col_run, col_status = st.columns([1, 4])
-with col_run:
-    btn_label = "🚀 Re-Run Analysis" if has_existing_data else "🚀 Run Analysis"
-    run_btn = st.button(btn_label, type="primary", use_container_width=True)
-
-with col_status:
-    if has_existing_data and not run_btn:
-        st.info(f"📂 Cached results found for `{selected_scen_key}`. Displaying directly.")
-    elif not has_existing_data:
-        st.warning("⚠️ No cached results found. Please click Run.")
-
-if run_btn:
-    run_scenario_config = {
-        'name': st.session_state['scenario_storage'][selected_scen_key]['name'],
-        'description': 'UI Run',
-        'capacity_factors': user_cfs, 
-        'load_scale': load_scale,
-        'generation_costs': user_gen_costs, 
-        'import_costs': user_border_costs,
-        'storage_mode': selected_storage_mode  # [NEW] Pass this mode to OPF
-    }
-    from powerflow.analysis.scenarios import SCENARIOS
-    SCENARIOS[folder_name] = run_scenario_config
-    run_scenario_config['name'] = folder_name
-
-    status = st.empty()
-    bar = st.progress(0)
-    engine = opf.OPFEngine(base_net, external_grids)
-    start_time = time.time()
+# --- LOGIC 1: BATCH RUN ---
+if batch_run_btn:
+    st.header("🚀 Batch Processing Execution")
     
-    try:
-        status.write(f"Running OPF for **{folder_name}**...")
-        res_net, res_info, converged = engine.run_scenario(run_scenario_config)
-        bar.progress(100)
+    if end_idx < start_idx:
+        st.error("Error: End Index must be greater than or equal to Start Index.")
+        st.stop()
         
-        if converged:
-            status.success(f"Converged in {time.time() - start_time:.2f}s")
-            exporter = report_export.ReportGenerator(res_net)
-            exporter.export_all(folder_name)
-            viz = visualization.Visualizer()
-            viz.create_map(res_net, res_info, result_folder=folder_name)
-            with open(os.path.join(result_dir, 'kpi.json'), 'r') as f: kpi_data = json.load(f)
+    scenarios_to_run = available_scenarios[start_idx : end_idx + 1]
+    total_batch = len(scenarios_to_run)
+    
+    st.write(f"Queue: **{total_batch}** scenarios (Index {start_idx} to {end_idx})")
+    
+    progress_bar = st.progress(0)
+    status_box = st.empty()
+    log_container = st.container()
+    results_summary = []
+    
+    engine = opf.OPFEngine(base_net, external_grids)
+    
+    with log_container:
+        for i, scen_key in enumerate(scenarios_to_run):
+            idx_in_list = start_idx + i
+            status_box.markdown(f"Running **{scen_key}** ({i+1}/{total_batch})...")
+            
+            t_start = time.time()
+            folder_name = scen_key.lower().replace(" ", "_")
+            
+            # Prepare Config (Use stored config, not UI overrides for batch consistency)
+            # You can change this to use UI overrides if you want them applied to ALL batch items
+            scen_config = copy.deepcopy(st.session_state['scenario_storage'][scen_key])
+            scen_config['name'] = folder_name
+            
+            run_status = "Unknown"
+            duration = 0.0
+            
+            try:
+                # Run OPF
+                res_net, res_info, converged = engine.run_scenario(scen_config)
+                duration = time.time() - t_start
+                
+                if converged:
+                    run_status = "✅ Converged"
+                    # Export Data
+                    exporter = report_export.ReportGenerator(res_net)
+                    exporter.export_all(folder_name)
+                    viz = visualization.Visualizer()
+                    viz.create_map(res_net, res_info, result_folder=folder_name)
+                    
+                    st.markdown(f"`[{idx_in_list}] {scen_key}`: <span class='success-text'>Converged</span> in {duration:.2f}s", unsafe_allow_html=True)
+                else:
+                    run_status = "❌ Failed (OPF)"
+                    st.markdown(f"`[{idx_in_list}] {scen_key}`: <span class='fail-text'>Not Converged</span> ({duration:.2f}s) -> Skipping", unsafe_allow_html=True)
+            
+            except Exception as e:
+                duration = time.time() - t_start
+                run_status = "⚠️ Error"
+                st.markdown(f"`[{idx_in_list}] {scen_key}`: <span class='fail-text'>Error: {str(e)}</span>", unsafe_allow_html=True)
+                # traceback.print_exc() # Print to console if needed
+            
+            # Save Summary
+            results_summary.append({
+                "Index": idx_in_list,
+                "Scenario": scen_key,
+                "Status": run_status,
+                "Time (s)": round(duration, 2)
+            })
+            
+            # Update Progress
+            progress_bar.progress((i + 1) / total_batch)
+            
+    status_box.success(f"Batch processing complete! ({total_batch} scenarios processed)")
+    
+    st.subheader("📝 Batch Summary")
+    df_res = pd.DataFrame(results_summary)
+    st.dataframe(df_res, use_container_width=True)
+
+
+# --- LOGIC 2: SINGLE RUN (Original Logic) ---
+else:
+    folder_name = selected_scen_key.lower().replace(" ", "_")
+    result_dir = os.path.join(config.OUTPUT_DIR, folder_name)
+    existing_kpi_path = os.path.join(result_dir, 'kpi.json')
+    existing_map_path = os.path.join(result_dir, f'{folder_name}_map.html')
+    has_existing_data = os.path.exists(existing_kpi_path)
+
+    col_run, col_status = st.columns([1, 4])
+    with col_run:
+        btn_label = "🚀 Re-Run Analysis" if has_existing_data else "🚀 Run Analysis"
+        run_btn = st.button(btn_label, type="primary", use_container_width=True)
+
+    with col_status:
+        if has_existing_data and not run_btn:
+            st.info(f"📂 Cached results found for `{selected_scen_key}`. Displaying directly.")
+        elif not has_existing_data:
+            st.warning("⚠️ No cached results found. Please click Run.")
+
+    if run_btn:
+        # For Single Run, we use the UI overrides
+        run_scenario_config = {
+            'name': st.session_state['scenario_storage'][selected_scen_key]['name'],
+            'description': 'UI Run',
+            'capacity_factors': user_cfs, 
+            'load_scale': load_scale,
+            'generation_costs': user_gen_costs, 
+            'import_costs': user_border_costs,
+            'storage_mode': selected_storage_mode
+        }
+        # Update session storage temporarily for this run? 
+        # Better to just pass config. The user can "Save Configuration" if they want permanence.
+        
+        status = st.empty()
+        bar = st.progress(0)
+        engine = opf.OPFEngine(base_net, external_grids)
+        start_time = time.time()
+        
+        try:
+            status.write(f"Running OPF for **{folder_name}**...")
+            res_net, res_info, converged = engine.run_scenario(run_scenario_config)
+            bar.progress(100)
+            
+            if converged:
+                status.success(f"Converged in {time.time() - start_time:.2f}s")
+                exporter = report_export.ReportGenerator(res_net)
+                exporter.export_all(folder_name)
+                viz = visualization.Visualizer()
+                viz.create_map(res_net, res_info, result_folder=folder_name)
+                with open(os.path.join(result_dir, 'kpi.json'), 'r') as f: kpi_data = json.load(f)
+                show_results(kpi_data, existing_map_path, folder_name)
+            else:
+                status.error("OPF did not converge. Try adjusting Load or Import Prices.")
+        except Exception as e:
+            status.error(f"Error during execution: {e}")
+            st.exception(e)
+    elif has_existing_data:
+        try:
+            with open(existing_kpi_path, 'r') as f: kpi_data = json.load(f)
             show_results(kpi_data, existing_map_path, folder_name)
-        else:
-            status.error("OPF did not converge. Try adjusting Load or Import Prices.")
-    except Exception as e:
-        status.error(f"Error during execution: {e}")
-        st.exception(e)
-elif has_existing_data:
-    try:
-        with open(existing_kpi_path, 'r') as f: kpi_data = json.load(f)
-        show_results(kpi_data, existing_map_path, folder_name)
-    except Exception as e: st.error(f"Error loading cached data: {e}")
+        except Exception as e: st.error(f"Error loading cached data: {e}")

@@ -112,6 +112,9 @@ class OPFEngine:
                 if pd.isna(install_cap) or install_cap <= 0:
                     install_cap = df.at[idx, 'p_mw']
                 
+                # Store Nameplate Capacity before modification
+                df.at[idx, 'nameplate_p_mw'] = install_cap
+
                 gen_type = str(df.at[idx, 'type'])
                 cf = cfs.get(gen_type, 1.0) # Default to 1.0
                 
@@ -142,8 +145,8 @@ class OPFEngine:
                     # GENERATOR LOGIC (Relaxed for Convergence):
                     # Set max to available power (CF * Cap)
                     df.at[idx, 'max_p_mw'] = actual_p
-                    # Set min to 50% of actual_p to allow flexibility
-                    df.at[idx, 'min_p_mw'] = 0.5 * actual_p 
+                    # Set min to 80% of actual_p to allow flexibility
+                    df.at[idx, 'min_p_mw'] = 0.9 * actual_p 
 
                 # Track Stats
                 if gen_type not in total_gen_breakdown: total_gen_breakdown[gen_type] = 0
